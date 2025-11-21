@@ -9,8 +9,7 @@ import time
 import logging
 from datetime import datetime, timezone, timedelta
 
-# Importar config
-from megacmd_tool import CloudModuleLoader
+
 config = CloudModuleLoader.load_module("config")
 
 # ============================================

@@ -6,7 +6,6 @@ import os
 import subprocess
 import threading
 
-from megacmd_tool import CloudModuleLoader
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
 backup = CloudModuleLoader.load_module("backup")

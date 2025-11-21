@@ -7,7 +7,6 @@ import subprocess
 import shutil
 from shutil import which
 
-from megacmd_tool import CloudModuleLoader
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
 megacmd = CloudModuleLoader.load_module("megacmd")
