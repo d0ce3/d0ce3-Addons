@@ -10,9 +10,14 @@ import os
 import importlib.util
 import json
 
-# ============================================
-# CONFIGURACIÓN
-# ============================================
+# Configuración de readline
+try:
+    import readline
+    readline.parse_and_bind(r'"\e[3~": delete-char')
+except ImportError:
+    pass
+
+
 VERSION = "1.0.0"
 LINKS_JSON_URL = "https://d0ce3.github.io/d0ce3-Addons/data/links.json"
 
