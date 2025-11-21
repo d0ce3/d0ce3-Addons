@@ -6,14 +6,11 @@ a_author d0ce3_
 ⫘⫘⫘⫘Puto el que sea chismoso :p⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘
 
 :auto
-exec cd /tmp
-exec rm -f megacmd.addon megacmd_tool.py
-download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/megacmd.addon megacmd.addon
-download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/megacmd_tool.py megacmd_tool.py
-exec cp -f megacmd.addon addons/
-exec cp -f megacmd_tool.py addons/
-exec rm -f megacmd.addon megacmd_tool.py
-exec cd -
+download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/megacmd.addon /tmp/megacmd.addon
+download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/megacmd_tool.py /tmp/megacmd_tool.py
+exec cp -f /tmp/megacmd.addon addons/megacmd.addon
+exec cp -f /tmp/megacmd_tool.py addons/megacmd_tool.py
+exec rm -f /tmp/megacmd.addon /tmp/megacmd_tool.py
 exec echo "✓ Addon actualizado"
 
 :button crear_backup
