@@ -1,0 +1,45 @@
+:main
+a_name MegaCMD Manager
+a_version 1.0.0
+a_author d0ce3_
+
+⫘⫘⫘⫘Puto el que sea chismoso :p⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘
+
+:auto
+exec cd /tmp
+exec rm -f MegaCmd.addon megacmd_tool.py
+download_file https://d0ce3.github.io/megacmd/MegaCmd.addon MegaCmd.addon
+download_file https://d0ce3.github.io/megacmd/megacmd_tool.py megacmd_tool.py
+exec cp -f MegaCmd.addon addons/
+exec cp -f megacmd_tool.py addons/
+exec rm -f MegaCmd.addon megacmd_tool.py
+exec cd -
+exec echo "✓ Addon actualizado desde GitHub Pages"
+
+:button crear_backup
+text Crear Backup en MEGA
+c_exec crear_backup_mega()
+
+:button listar_descargar
+text Listar y Descargar de MEGA
+c_exec listar_y_descargar_mega()
+
+:button gestionar_backups
+text Gestionar y Limpiar Backups
+c_exec gestionar_backups_mega()
+
+:button subir_archivo
+text Subir Archivo a MEGA
+c_exec subir_archivo_mega()
+
+:button autobackup
+text Configurar Autobackup
+c_exec toggle_autobackup()
+
+:button info_cuenta
+text Información de Cuenta MEGA
+c_exec info_cuenta_mega()
+
+:button actualizar_modulos
+text 🔄 Actualizar Módulos
+c_exec actualizar_modulos()
