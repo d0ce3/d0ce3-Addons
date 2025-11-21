@@ -8,8 +8,8 @@ a_author d0ce3_
 :auto
 exec cd /tmp
 exec rm -f MegaCmd.addon megacmd_tool.py
-download_file https://d0ce3.github.io/megacmd/MegaCmd.addon MegaCmd.addon
-download_file https://d0ce3.github.io/megacmd/megacmd_tool.py megacmd_tool.py
+download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/MegaCmd.addon MegaCmd.addon
+download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/megacmd_tool.py megacmd_tool.py
 exec cp -f MegaCmd.addon addons/
 exec cp -f megacmd_tool.py addons/
 exec rm -f MegaCmd.addon megacmd_tool.py
