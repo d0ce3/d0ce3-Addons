@@ -13,7 +13,7 @@ except ImportError:
 # ============================================
 # CONFIGURACIÓN
 # ============================================
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 LINKS_JSON_URL = "https://d0ce3.github.io/d0ce3-Addons/data/links.json"
 
 # Directorio base
