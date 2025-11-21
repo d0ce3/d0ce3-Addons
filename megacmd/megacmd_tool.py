@@ -31,7 +31,6 @@ def ensure_requests():
         return requests
     except ImportError:
         import subprocess
-        print("📦 Instalando requests...")
         try:
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", "-q", "requests"],
@@ -106,24 +105,17 @@ class PackageManager:
         return os.path.exists(PACKAGE_DIR) and len(os.listdir(PACKAGE_DIR)) > 0
     
     @staticmethod
-    def download_and_extract(debug=False):
+    def download_and_extract():
         """Descarga y extrae el paquete completo"""
         try:
             package_url = ConfigManager.get_package_url()
             
             if not package_url:
-                if debug:
-                    print("⚠ No se pudo obtener URL del paquete desde links.json")
                 return False
-            
-            if debug:
-                print(f"📥 Descargando paquete desde GitHub Pages...")
             
             response = requests.get(package_url, timeout=60)
             
             if response.status_code != 200:
-                if debug:
-                    print(f"⚠ Error HTTP {response.status_code} al descargar paquete")
                 return False
             
             # Guardar ZIP temporal
@@ -132,9 +124,6 @@ class PackageManager:
             
             with open(temp_zip, 'wb') as f:
                 f.write(response.content)
-            
-            if debug:
-                print("📦 Extrayendo paquete...")
             
             # Extraer
             import zipfile
@@ -157,32 +146,20 @@ class PackageManager:
                         
                         with open(target_path, 'wb') as target:
                             target.write(content)
-                        
-                        if debug:
-                            print(f"  ✓ {filename}")
             
             # Limpiar ZIP temporal
             os.remove(temp_zip)
             
-            if debug:
-                print("✓ Paquete instalado correctamente\n")
-            
             return True
             
         except Exception as e:
-            if debug:
-                print(f"❌ Error instalando paquete: {e}")
-                import traceback
-                traceback.print_exc()
             return False
     
     @staticmethod
-    def ensure_installed(debug=False):
+    def ensure_installed():
         """Asegura que el paquete esté instalado"""
         if not PackageManager.is_installed():
-            if debug:
-                print("📦 Módulos no encontrados, descargando paquete...\n")
-            return PackageManager.download_and_extract(debug=debug)
+            return PackageManager.download_and_extract()
         return True
 
 # ============================================
@@ -194,7 +171,7 @@ class ModuleLoader:
     _cache = {}
     
     @staticmethod
-    def load_module(module_name, debug=False):
+    def load_module(module_name):
         """Carga un módulo desde el paquete"""
         
         # Verificar cache
@@ -202,17 +179,13 @@ class ModuleLoader:
             return ModuleLoader._cache[module_name]
         
         # Asegurar que el paquete esté instalado
-        if not PackageManager.ensure_installed(debug=debug):
-            if debug:
-                print(f"❌ No se pudo instalar el paquete para cargar {module_name}")
+        if not PackageManager.ensure_installed():
             return None
         
         # Ruta del módulo
         module_file = os.path.join(PACKAGE_DIR, f"{module_name}.py")
         
         if not os.path.exists(module_file):
-            if debug:
-                print(f"⚠ Módulo {module_name}.py no encontrado en {PACKAGE_DIR}")
             return None
         
         try:
@@ -225,8 +198,6 @@ class ModuleLoader:
             source_code = source_code.replace('\r\n', '\n')
             
             if not source_code.strip():
-                if debug:
-                    print(f"⚠ Módulo {module_name} está vacío")
                 return None
             
             # Crear módulo
@@ -248,10 +219,6 @@ class ModuleLoader:
             return module
             
         except Exception as e:
-            if debug:
-                print(f"❌ Error cargando módulo {module_name}: {e}")
-                import traceback
-                traceback.print_exc()
             return None
     
     @staticmethod
@@ -285,9 +252,10 @@ class ModuleLoader:
                 print(f"  ✓ {key} limpiado")
         
         print()
+        print("📥 Descargando paquete actualizado...")
         
         # Re-descargar paquete
-        if PackageManager.download_and_extract(debug=True):
+        if PackageManager.download_and_extract():
             print("="*60)
             print("✅ ACTUALIZACIÓN COMPLETADA")
             print("="*60)
@@ -403,88 +371,22 @@ def actualizar_modulos():
 # ============================================
 
 def init():
-    """Inicializa el sistema al cargar el módulo"""
+    """Inicializa el sistema silenciosamente"""
     
-    # Detectar si es modo debug
-    debug_mode = __name__ == "__main__"
+    # Cargar configuración (silencioso)
+    ConfigManager.load()
     
-    if debug_mode:
-        print("\n" + "="*60)
-        print("🚀 MegaCMD Manager v" + VERSION)
-        print("="*60 + "\n")
-    
-    # Cargar configuración
-    if debug_mode:
-        print("📡 Conectando con GitHub Pages...")
-    
-    config_data = ConfigManager.load()
-    
-    if config_data:
-        remote_version = config_data.get("version")
-        
-        if debug_mode:
-            print(f"✓ Configuración cargada")
-            print(f"📌 Versión local:  {VERSION}")
-            print(f"📌 Versión remota: {remote_version}")
-        
-        if remote_version and remote_version != VERSION:
-            if debug_mode:
-                print("\n⚠ ¡Nueva versión disponible!")
-                print("💡 Ejecutá 'Actualizar Módulos' desde el menú del addon")
-        elif debug_mode:
-            print("✓ Estás usando la última versión")
-    else:
-        if debug_mode:
-            print("⚠ No se pudo cargar configuración remota")
-            print("💡 Verificá tu conexión a internet")
-    
-    if debug_mode:
-        print()
-    
-    # Verificar/instalar paquete de módulos
-    if not PackageManager.ensure_installed(debug=debug_mode):
-        if debug_mode:
-            print("⚠ No se pudo instalar el paquete de módulos")
-            print("💡 Intentá:")
-            print("   1. Verificar tu conexión a internet")
-            print("   2. Ejecutar :auto en el addon")
-            print("   3. Usar el botón 'Actualizar Módulos'\n")
-            print("="*60 + "\n")
+    # Asegurar paquete instalado (silencioso)
+    if not PackageManager.ensure_installed():
         return
     
-    # Pre-cargar módulo de configuración
-    config = ModuleLoader.load_module("config", debug=debug_mode)
-    if config and debug_mode:
-        print("✓ Módulo de configuración cargado")
-    elif not config and debug_mode:
-        print("⚠ No se pudo cargar módulo config")
+    # Pre-cargar módulo de configuración (silencioso)
+    ModuleLoader.load_module("config")
     
-    # Inicializar autobackup si está activo (siempre silencioso)
-    autobackup = ModuleLoader.load_module("autobackup", debug=False)
+    # Inicializar autobackup si está activo (silencioso)
+    autobackup = ModuleLoader.load_module("autobackup")
     if autobackup and hasattr(autobackup, 'init_on_load'):
         autobackup.init_on_load()
-    
-    if debug_mode:
-        print("\n" + "="*60)
-        print("✅ Sistema listo para usar")
-        print("="*60 + "\n")
 
-# Ejecutar init solo cuando se importa (no cuando se ejecuta directamente)
-if __name__ != "__main__":
-    init()
-
-# Ejecutar si se llama directamente (para testing)
-if __name__ == "__main__":
-    print("MegaCMD Manager - Modo de prueba")
-    print("="*60)
-    init()
-    
-    print("\nProbando carga de módulos:")
-    print("-"*60)
-    
-    for mod in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup']:
-        module = ModuleLoader.load_module(mod, debug=True)
-        if module:
-            print(f"✓ {mod} cargado correctamente")
-        else:
-            print(f"✗ {mod} falló al cargar")
+# Inicializar al cargar el módulo
+init()
