@@ -14,7 +14,7 @@ import json
 # CONFIGURACIÓN
 # ============================================
 VERSION = "1.0.0"
-LINKS_JSON_URL = "https://d0ce3.github.io/data/links.json"
+LINKS_JSON_URL = "https://d0ce3.github.io/d0ce3-Addons/data/links.json"
 
 # Directorio base
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
