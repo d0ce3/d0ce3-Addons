@@ -10,31 +10,19 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     Encuentra la carpeta del servidor de forma inteligente.
     Busca en múltiples ubicaciones comunes.
     """
-    # Lista de ubicaciones a verificar
     ubicaciones_a_verificar = [
-        # 1. Ruta absoluta directa en /workspaces
         f"/workspaces/{os.environ.get('CODESPACE_NAME', 'unknown')}/{nombre_carpeta}",
-        
-        # 2. Buscar en /workspaces/*/servidor_minecraft
-        None,  # Se busca dinámicamente
-        
-        # 3. Relativo desde getcwd()
+        None,
         os.path.join(os.getcwd(), nombre_carpeta),
-        
-        # 4. Subir un nivel desde getcwd()
         os.path.join(os.path.dirname(os.getcwd()), nombre_carpeta),
-        
-        # 5. En el home del usuario
         os.path.expanduser(f"~/{nombre_carpeta}"),
     ]
     
-    # Verificar ubicaciones directas
     for ubicacion in ubicaciones_a_verificar:
         if ubicacion and os.path.exists(ubicacion) and os.path.isdir(ubicacion):
             utils.logger.info(f"Carpeta del servidor encontrada en: {ubicacion}")
             return ubicacion
     
-    # Búsqueda dinámica en /workspaces
     try:
         if os.path.exists("/workspaces"):
             for item in os.listdir("/workspaces"):
@@ -45,14 +33,12 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     except:
         pass
     
-    # Si no se encuentra, retornar None
     utils.logger.error(f"No se pudo encontrar la carpeta '{nombre_carpeta}'")
     return None
 
 def listar_carpetas_mega(ruta="/"):
     """
     Lista las carpetas disponibles en MEGA en la ruta especificada.
-    Retorna una lista de nombres de carpetas.
     """
     try:
         cmd = ["mega-ls", ruta]
@@ -62,7 +48,6 @@ def listar_carpetas_mega(ruta="/"):
             utils.logger.error(f"Error listando carpetas en MEGA: {result.stderr}")
             return None
         
-        # Obtener solo nombres de carpetas (sin detalles)
         carpetas = []
         lineas = result.stdout.strip().split('\n')
         
@@ -81,8 +66,7 @@ def listar_carpetas_mega(ruta="/"):
 
 def navegar_carpetas_mega(ruta_inicial="/"):
     """
-    Permite navegar por las carpetas de MEGA de forma interactiva y simplificada.
-    Retorna la ruta seleccionada o None si se cancela.
+    Permite navegar por las carpetas de MEGA de forma interactiva.
     """
     ruta_actual = ruta_inicial
     
@@ -117,18 +101,15 @@ def navegar_carpetas_mega(ruta_inicial="/"):
         elif opcion == 's':
             return ruta_actual
         elif opcion == '0':
-            # Subir un nivel
             if ruta_actual != "/":
                 ruta_actual = os.path.dirname(ruta_actual)
                 if not ruta_actual:
                     ruta_actual = "/"
         else:
-            # Intentar entrar a una carpeta
             try:
                 indice = int(opcion)
                 if 1 <= indice <= len(carpetas):
                     carpeta_seleccionada = carpetas[indice - 1]
-                    # Construir nueva ruta
                     if ruta_actual == "/":
                         ruta_actual = f"/{carpeta_seleccionada}"
                     else:
@@ -152,7 +133,6 @@ def ejecutar_backup_manual():
             utils.pausar()
             return
 
-        # Obtener ruta y resolverla correctamente
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
         server_folder = encontrar_carpeta_servidor(server_folder_config)
             
@@ -297,9 +277,11 @@ def ejecutar_backup_automatico():
         timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         utils.logger.info(f"Nombre de backup: {backup_name}")
+        utils.logger.info("Iniciando compresión...")
 
+        # Compresión con salida redirigida
         cmd = ["zip", "-r", "-q", backup_name, server_folder]
-        proceso = subprocess.run(cmd)
+        proceso = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if proceso.returncode != 0 or not os.path.exists(backup_name):
             utils.logger.error("Error durante compresión automática")
             return
@@ -308,8 +290,10 @@ def ejecutar_backup_automatico():
         backup_size_mb = backup_size / (1024 * 1024)
         utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
 
-        cmd_upload = ["mega-put", backup_name, backup_folder]
-        proceso_upload = subprocess.run(cmd_upload)
+        # Subida a MEGA con salida redirigida (sin barra de progreso)
+        utils.logger.info("Iniciando subida a MEGA...")
+        cmd_upload = ["mega-put", "-q", backup_name, backup_folder]
+        proceso_upload = subprocess.run(cmd_upload, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if proceso_upload.returncode != 0:
             utils.logger.error("Error al subir backup automático a MEGA")
             try:
@@ -361,12 +345,8 @@ def limpiar_backups_antiguos():
 
 def configurar_autobackup():
     """
-    Configura el autobackup de forma interactiva y simplificada.
+    Configura el autobackup con menú de botones intuitivo.
     """
-    utils.limpiar_pantalla()
-    print("\n" + "=" * 60)
-    print("CONFIGURAR AUTOBACKUP")
-    print("=" * 60 + "\n")
     
     # Verificar MegaCMD
     if not utils.verificar_megacmd():
@@ -374,145 +354,137 @@ def configurar_autobackup():
         utils.pausar()
         return
     
-    # Mostrar configuración actual
-    autobackup_enabled = config.CONFIG.get("autobackup_enabled", False)
-    intervalo_actual = config.CONFIG.get("backup_interval_minutes", 5)
-    backup_folder = config.CONFIG.get("backup_folder", "/backups")
-    server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
-    max_backups = config.CONFIG.get("max_backups", 5)
-    backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
-    
-    print("📋 CONFIGURACIÓN ACTUAL:")
-    print(f"   Estado: {'✓ ACTIVADO' if autobackup_enabled else '✗ DESACTIVADO'}")
-    print(f"   Intervalo: cada {intervalo_actual} minutos")
-    print(f"   Carpeta servidor: {server_folder}")
-    print(f"   Destino MEGA: {backup_folder}")
-    print(f"   Prefijo backup: {backup_prefix}")
-    print(f"   Máximo backups: {max_backups}")
-    print()
-    
-    utils.logger.info("========== CONFIGURAR AUTOBACKUP ==========")
-    
-    # Preguntar si activar/desactivar
-    if autobackup_enabled:
-        if utils.confirmar("¿Desactivar autobackup?"):
-            config.set("autobackup_enabled", False)
-            utils.print_msg("Autobackup desactivado")
-            utils.logger.info("Autobackup desactivado por usuario")
-            utils.pausar()
-            return
-        else:
-            print("\nAutobackup sigue activado. Puede modificar la configuración:\n")
-    else:
-        if not utils.confirmar("¿Activar autobackup?"):
-            print("Cancelado")
-            utils.logger.info("Configuración de autobackup cancelada")
-            utils.pausar()
-            return
-    
-    # Configurar intervalo
-    print(f"\n⏱️  Intervalo actual: {intervalo_actual} minutos")
-    if utils.confirmar("¿Cambiar intervalo?"):
-        while True:
-            try:
-                nuevo_intervalo = input("   Nuevo intervalo en minutos (1-60): ").strip()
-                nuevo_intervalo = int(nuevo_intervalo)
-                if 1 <= nuevo_intervalo <= 60:
-                    intervalo_actual = nuevo_intervalo
-                    break
-                else:
-                    utils.print_warning("Intervalo debe estar entre 1 y 60 minutos")
-            except ValueError:
-                utils.print_warning("Ingrese un número válido")
-            except KeyboardInterrupt:
-                print("\nCancelado")
-                utils.pausar()
-                return
-    
-    # OMITIDA: Configuración de carpeta servidor (siempre será servidor_minecraft)
-    
-    # Configurar destino MEGA con navegador simplificado
-    print(f"\n☁️  Destino MEGA actual: {backup_folder}")
-    print("\n¿Cómo desea seleccionar la carpeta destino?")
-    print("   1. Navegar por MEGA")
-    print("   2. Escribir ruta manualmente")
-    print("   3. Mantener actual")
-    
-    opcion_destino = input("\nSeleccione opción (1-3): ").strip()
-    
-    if opcion_destino == "1":
-        print("\n🔍 Cargando carpetas MEGA...")
-        nueva_ruta = navegar_carpetas_mega(backup_folder)
-        if nueva_ruta:
-            backup_folder = nueva_ruta
-            utils.print_msg(f"Carpeta seleccionada: {backup_folder}")
-            utils.logger.info(f"Destino MEGA cambiado a: {backup_folder}")
-        else:
-            print("Navegación cancelada, se mantiene la carpeta actual")
-    elif opcion_destino == "2":
-        nuevo_destino = input("   Nueva carpeta MEGA (ej: /backups): ").strip()
-        if nuevo_destino:
-            if not nuevo_destino.startswith("/"):
-                nuevo_destino = "/" + nuevo_destino
-            backup_folder = nuevo_destino
-            utils.logger.info(f"Destino MEGA cambiado a: {nuevo_destino}")
-    
-    # Configurar prefijo de backup
-    print(f"\n🏷️  Prefijo actual: {backup_prefix}")
-    if utils.confirmar("¿Cambiar prefijo de backups?"):
-        nuevo_prefijo = input("   Nuevo prefijo (ej: MSX): ").strip()
-        if nuevo_prefijo:
-            backup_prefix = nuevo_prefijo
-            utils.logger.info(f"Prefijo cambiado a: {nuevo_prefijo}")
-    
-    # Configurar máximo de backups
-    print(f"\n🗂️  Máximo de backups: {max_backups}")
-    if utils.confirmar("¿Cambiar cantidad máxima de backups?"):
-        while True:
-            try:
-                nuevo_max = input("   Cantidad máxima (1-20): ").strip()
-                nuevo_max = int(nuevo_max)
-                if 1 <= nuevo_max <= 20:
-                    max_backups = nuevo_max
-                    break
-                else:
-                    utils.print_warning("Cantidad debe estar entre 1 y 20")
-            except ValueError:
-                utils.print_warning("Ingrese un número válido")
-            except KeyboardInterrupt:
-                print("\nCancelado")
-                utils.pausar()
-                return
-    
-    # Mostrar resumen y confirmar
-    print("\n" + "=" * 60)
-    print("RESUMEN DE CONFIGURACIÓN")
-    print("=" * 60)
-    print(f"✓ Estado: ACTIVADO")
-    print(f"✓ Intervalo: cada {intervalo_actual} minutos")
-    print(f"✓ Carpeta servidor: {server_folder}")
-    print(f"✓ Destino MEGA: {backup_folder}")
-    print(f"✓ Prefijo: {backup_prefix}")
-    print(f"✓ Máximo backups: {max_backups}")
-    print("=" * 60 + "\n")
-    
-    if utils.confirmar("¿Guardar esta configuración?"):
-        config.set("autobackup_enabled", True)
-        config.set("backup_interval_minutes", intervalo_actual)
-        config.set("server_folder", server_folder)
-        config.set("backup_folder", backup_folder)
-        config.set("backup_prefix", backup_prefix)
-        config.set("max_backups", max_backups)
+    while True:
+        utils.limpiar_pantalla()
+        print("\n" + "=" * 60)
+        print("CONFIGURAR AUTOBACKUP")
+        print("=" * 60 + "\n")
         
-        utils.print_msg("Configuración guardada exitosamente")
-        utils.logger.info(f"Autobackup configurado: intervalo={intervalo_actual}min, destino={backup_folder}, max={max_backups}")
+        # Obtener configuración actual
+        autobackup_enabled = config.CONFIG.get("autobackup_enabled", False)
+        intervalo_actual = config.CONFIG.get("backup_interval_minutes", 5)
+        backup_folder = config.CONFIG.get("backup_folder", "/backups")
+        server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
+        max_backups = config.CONFIG.get("max_backups", 5)
         
+        # Mostrar configuración actual
+        print("📋 CONFIGURACIÓN ACTUAL:")
+        print(f"   Estado: {'✓ ACTIVADO' if autobackup_enabled else '✗ DESACTIVADO'}")
+        print(f"   Intervalo: cada {intervalo_actual} minutos")
+        print(f"   Carpeta servidor: {server_folder}")
+        print(f"   Destino MEGA: {backup_folder}")
+        print(f"   Máximo backups: {max_backups}")
+        print()
+        
+        utils.logger.info("========== MENÚ CONFIGURAR AUTOBACKUP ==========")
+        
+        # Menú de opciones
+        print("OPCIONES:")
         if autobackup_enabled:
-            print("\n⚠️  Nota: Reinicie el proceso de autobackup para aplicar los cambios")
+            print("   1. Desactivar autobackup")
         else:
-            print("\n✓ Autobackup activado con la nueva configuración")
-    else:
-        print("Configuración cancelada")
-        utils.logger.info("Configuración cancelada por usuario")
-    
-    utils.pausar()
+            print("   1. Activar autobackup")
+        print("   2. Cambiar intervalo de autobackup")
+        print("   3. Cambiar ruta de guardado")
+        print("   4. Cambiar backups máximos")
+        print("   0. Volver")
+        print()
+        
+        opcion = input("Seleccione una opción: ").strip()
+        
+        if opcion == "1":
+            # Activar/Desactivar
+            if autobackup_enabled:
+                config.set("autobackup_enabled", False)
+                utils.print_msg("Autobackup desactivado")
+                utils.logger.info("Autobackup desactivado por usuario")
+            else:
+                config.set("autobackup_enabled", True)
+                utils.print_msg("Autobackup activado")
+                utils.logger.info("Autobackup activado por usuario")
+                print("\n⚠️  Nota: Reinicie el proceso de autobackup para aplicar los cambios")
+            utils.pausar()
+            
+        elif opcion == "2":
+            # Cambiar intervalo
+            print(f"\n⏱️  Intervalo actual: {intervalo_actual} minutos")
+            while True:
+                try:
+                    nuevo_intervalo = input("   Nuevo intervalo en minutos (1-60): ").strip()
+                    if not nuevo_intervalo:
+                        break
+                    nuevo_intervalo = int(nuevo_intervalo)
+                    if 1 <= nuevo_intervalo <= 60:
+                        config.set("backup_interval_minutes", nuevo_intervalo)
+                        utils.print_msg(f"Intervalo cambiado a {nuevo_intervalo} minutos")
+                        utils.logger.info(f"Intervalo cambiado a {nuevo_intervalo} minutos")
+                        break
+                    else:
+                        utils.print_warning("Intervalo debe estar entre 1 y 60 minutos")
+                except ValueError:
+                    utils.print_warning("Ingrese un número válido")
+                except KeyboardInterrupt:
+                    print("\nCancelado")
+                    break
+            utils.pausar()
+            
+        elif opcion == "3":
+            # Cambiar ruta de guardado
+            print(f"\n☁️  Destino MEGA actual: {backup_folder}\n")
+            print("¿Cómo desea seleccionar la carpeta destino?")
+            print("   1. Navegar por MEGA")
+            print("   2. Escribir ruta manualmente")
+            print("   3. Cancelar")
+            
+            opcion_destino = input("\nSeleccione opción (1-3): ").strip()
+            
+            if opcion_destino == "1":
+                print("\n🔍 Cargando carpetas MEGA...")
+                nueva_ruta = navegar_carpetas_mega(backup_folder)
+                if nueva_ruta:
+                    config.set("backup_folder", nueva_ruta)
+                    utils.print_msg(f"Carpeta cambiada a: {nueva_ruta}")
+                    utils.logger.info(f"Destino MEGA cambiado a: {nueva_ruta}")
+                else:
+                    print("Navegación cancelada")
+            elif opcion_destino == "2":
+                nuevo_destino = input("   Nueva carpeta MEGA (ej: /backups): ").strip()
+                if nuevo_destino:
+                    if not nuevo_destino.startswith("/"):
+                        nuevo_destino = "/" + nuevo_destino
+                    config.set("backup_folder", nuevo_destino)
+                    utils.print_msg(f"Carpeta cambiada a: {nuevo_destino}")
+                    utils.logger.info(f"Destino MEGA cambiado a: {nuevo_destino}")
+            
+            utils.pausar()
+            
+        elif opcion == "4":
+            # Cambiar máximo de backups
+            print(f"\n🗂️  Máximo de backups actual: {max_backups}")
+            print("💡 Recomendado: 5 backups")
+            while True:
+                try:
+                    nuevo_max = input("   Nueva cantidad máxima (1-20): ").strip()
+                    if not nuevo_max:
+                        break
+                    nuevo_max = int(nuevo_max)
+                    if 1 <= nuevo_max <= 20:
+                        config.set("max_backups", nuevo_max)
+                        utils.print_msg(f"Máximo de backups cambiado a {nuevo_max}")
+                        utils.logger.info(f"Máximo de backups cambiado a {nuevo_max}")
+                        break
+                    else:
+                        utils.print_warning("Cantidad debe estar entre 1 y 20")
+                except ValueError:
+                    utils.print_warning("Ingrese un número válido")
+                except KeyboardInterrupt:
+                    print("\nCancelado")
+                    break
+            utils.pausar()
+            
+        elif opcion == "0":
+            utils.logger.info("Saliendo de configuración de autobackup")
+            break
+        else:
+            utils.print_warning("Opción inválida")
+            utils.pausar()
