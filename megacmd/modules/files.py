@@ -74,9 +74,9 @@ def listar_y_descargar():
             utils.pausar()
             return
 
-        # Lista carpetas en la raíz de MEGA
+        # Listar carpetas en raíz MEGA usando mega-ls -l
         print("📁 Listar carpetas en MEGA raíz:\n")
-        cmd_ls_root = ["mega-ls", "/"]
+        cmd_ls_root = ["mega-ls", "-l"]
         result_root = subprocess.run(cmd_ls_root, capture_output=True, text=True)
         if result_root.returncode != 0:
             utils.print_error("No se pudo listar la raíz en MEGA")
@@ -85,8 +85,10 @@ def listar_y_descargar():
 
         carpetas = []
         for line in result_root.stdout.strip().split('\n'):
-            if line.endswith('/'):
-                carpetas.append(line.strip('/').strip())
+            parts = line.split()
+            if len(parts) >= 2 and parts[0].startswith('d'):  # directorios
+                nombre = parts[-1]
+                carpetas.append(nombre)
 
         if not carpetas:
             carpetas = [config.CONFIG.get("backup_folder", "/backups")]
@@ -167,6 +169,7 @@ def listar_y_descargar():
         utils.print_msg(f"Descargado: {archivo_seleccionado}")
         utils.logger.info(f"Archivo descargado: {archivo_seleccionado}")
 
+        print()
         if utils.confirmar("¿Descomprimir ahora?"):
             descomprimir_backup(archivo_seleccionado)
 
