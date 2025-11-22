@@ -228,7 +228,7 @@ class ModuleLoader:
         print("🧹 Limpiando cache de módulos...")
         ModuleLoader._cache.clear()
         for key in list(sys.modules.keys()):
-            if key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup']:
+            if key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger']:
                 del sys.modules[key]
                 print(f" ✓ {key} limpiado")
         print()
@@ -328,7 +328,7 @@ def actualizar_modulos():
     input("Presioná Enter para continuar...")
 
 def init():
-    """Inicialización del sistema con control de autobackup único"""
+    """Inicialización del sistema con control de autobackup único y logger"""
     
     # Cargar configuración
     ConfigManager.load()
@@ -344,6 +344,19 @@ def init():
         return
     
     utils = ModuleLoader.load_module("utils")
+    
+    # NUEVO: Inicializar logger con configuración de debug desde JSON
+    if utils and utils.logger_manager:
+        debug_enabled = config.CONFIG.get("debug_enabled", False)
+        if debug_enabled:
+            utils.logger_manager.enable_debug()
+            if hasattr(utils, 'logger'):
+                utils.logger.info("=" * 60)
+                utils.logger.info("SISTEMA INICIADO CON DEBUG ACTIVADO")
+                utils.logger.info("=" * 60)
+        else:
+            if hasattr(utils, 'logger'):
+                utils.logger.debug("Sistema iniciado - logs solo en archivo")
     
     # Verificar si el autobackup ya fue inicializado
     if AutobackupManager.is_initialized():

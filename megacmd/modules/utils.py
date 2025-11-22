@@ -1,44 +1,39 @@
 import os
 import sys
-import logging
 from datetime import datetime
 
 # ============================================
-# CONFIGURACIÓN DE LOGGING
+# IMPORTAR LOGGER CENTRALIZADO
 # ============================================
 
-logger = logging.getLogger('megacmd')
-logger.setLevel(logging.INFO)
-
-# Limpiar handlers existentes para evitar duplicados
-if logger.handlers:
-    logger.handlers.clear()
-
-# Ruta del log
 try:
-    log_file = os.path.join(os.getcwd(), 'addons', 'megacmd_backup.log')
-    
-    log_dir = os.path.dirname(log_file)
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
+    # Intentar cargar logger centralizado
+    logger_module = CloudModuleLoader.load_module("logger")
+    if logger_module:
+        logger_manager = logger_module.logger_manager
+        logger = logger_module.logger
+    else:
+        # Fallback: crear logger básico
+        import logging
+        logger = logging.getLogger('megacmd')
+        logger.setLevel(logging.INFO)
+        if not logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+        logger_manager = None
 except:
-    log_file = 'megacmd_backup.log'
-
-# Handler para archivo
-try:
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    file_handler.setFormatter(formatter)
-    
-    logger.addHandler(file_handler)
-except Exception as e:
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    # Fallback: crear logger básico
+    import logging
+    logger = logging.getLogger('megacmd')
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    logger_manager = None
 
 # ============================================
 # FUNCIONES DE UTILIDAD
@@ -233,6 +228,7 @@ def es_directorio_valido(ruta):
 
 __all__ = [
     'logger',
+    'logger_manager',
     'print_msg',
     'print_error',
     'print_warning',
