@@ -1,277 +1,277 @@
 """
-Módulo de gestión de backups
+Módulo de gestión de backups para MegaCMD Manager
 """
 
 import os
 import subprocess
-import shutil
-from shutil import which
+from datetime import datetime
 
+# Cargar dependencias
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
 megacmd = CloudModuleLoader.load_module("megacmd")
 
-# ============================================
-# INSTALACIÓN DE HERRAMIENTAS
-# ============================================
-
-def is_zip_installed():
-    return which("zip") is not None
-
-def install_zip():
-    """Instala zip"""
-    if is_zip_installed():
-        return True
-
-    utils.logger.info("Instalando zip...")
-    utils.print_msg("Instalando zip...", "🡻")
-
-    ok, stdout, stderr = utils.run_command(
-        ["sudo", "apt-get", "install", "-y", "-qq", "zip"]
-    )
-
-    if ok and is_zip_installed():
-        utils.logger.info("zip instalado correctamente")
-        utils.print_msg("zip instalado correctamente", "✔")
-        return True
-    else:
-        utils.logger.error(f"Error al instalar zip: {stderr}")
-        utils.print_msg("Error al instalar zip", "✖")
-        return False
-
-# ============================================
-# GESTIÓN DE BACKUPS
-# ============================================
-
-def list_backups_in_mega(carpeta):
-    """Lista backups en MEGA"""
-    ok, stdout, stderr = utils.run_command(["mega-ls", carpeta])
-
-    if not ok:
-        return []
-
-    archivos = stdout.strip().split('\n')
-    prefix = config.CONFIG["backup_prefix"]
-    backups = [f for f in archivos if f.startswith(f'{prefix}_') and f.endswith('.zip')]
-
-    return backups
-
-def sort_backups_by_date(backups):
-    """Ordena backups por fecha"""
-    from datetime import datetime
-
-    def extraer_fecha(nombre):
-        try:
-            prefix = config.CONFIG["backup_prefix"]
-            fecha_hora = nombre.replace(f'{prefix}_', '').replace('.zip', '')
-            fecha, hora = fecha_hora.split('_')
-            dia, mes, anio = fecha.split('-')
-            hora_min = hora.replace('-', ':')
-            return datetime.strptime(f"{anio}-{mes}-{dia} {hora_min}", "%Y-%m-%d %H:%M")
-        except:
-            return datetime.min
-
-    return sorted(backups, key=extraer_fecha, reverse=True)
-
-def cleanup_old_backups(max_backups=None, carpeta=None, silencioso=False):
-    """Elimina backups antiguos"""
-    if max_backups is None:
-        max_backups = config.CONFIG["max_backups"]
-    if carpeta is None:
-        carpeta = config.CONFIG["backup_folder"]
-
-    if not megacmd.is_logged_in():
-        return False
-
-    if not silencioso:
-        utils.print_msg(f"Verificando backups en {carpeta}...", "🗑")
-
-    utils.logger.info(f"Verificando backups en {carpeta}, manteniendo {max_backups}")
-
-    backups = list_backups_in_mega(carpeta)
-
-    if len(backups) <= max_backups:
-        if not silencioso:
-            utils.print_msg(f"Total de backups: {len(backups)}/{max_backups} - No hay que eliminar nada", "✔")
-        utils.logger.info(f"Total de backups: {len(backups)}/{max_backups} - No se eliminó nada")
-        return True
-
-    backups_ordenados = sort_backups_by_date(backups)
-    backups_a_eliminar = backups_ordenados[max_backups:]
-
-    if not silencioso:
-        utils.print_msg(f"Se eliminarán {len(backups_a_eliminar)} backup(s) antiguo(s):", "⚠")
-        for backup in backups_a_eliminar:
-            print(f" - {backup}")
-        print()
-
-    utils.logger.info(f"Eliminando {len(backups_a_eliminar)} backups antiguos: {backups_a_eliminar}")
-
-    for backup in backups_a_eliminar:
-        ruta_completa = f"{carpeta}/{backup}"
-        ok, stdout, stderr = utils.run_command(["mega-rm", ruta_completa])
-
-        if ok:
-            utils.logger.info(f"Eliminado: {backup}")
-            if not silencioso:
-                utils.print_msg(f"Eliminado: {backup}", "✔")
-        else:
-            utils.logger.error(f"Error al eliminar {backup}: {stderr}")
-            if not silencioso:
-                utils.print_msg(f"Error al eliminar {backup}", "✖")
-
-    if not silencioso:
-        print()
-        utils.print_msg(f"Mantenidos: {max_backups} backups más recientes", "✔")
-
-    utils.logger.info(f"Limpieza completada - Mantenidos {max_backups} backups")
-    return True
+# Verificar que utils cargó correctamente
+if not utils:
+    import logging
+    logger = logging.getLogger('megacmd')
+    
+    class TempUtils:
+        logger = logger
+        
+        @staticmethod
+        def print_msg(msg, icono="✓"):
+            print(f"{icono} ⎹ {msg}")
+        
+        @staticmethod
+        def print_error(msg):
+            print(f"✖ ⎹ {msg}")
+        
+        @staticmethod
+        def print_warning(msg):
+            print(f"⚠ ⎹ {msg}")
+        
+        @staticmethod
+        def Spinner(msg):
+            class DummySpinner:
+                def __init__(self, mensaje):
+                    self.mensaje = mensaje
+                def start(self, proceso, check_file=None):
+                    proceso.wait()
+                    return True
+            return DummySpinner(msg)
+        
+        @staticmethod
+        def limpiar_pantalla():
+            os.system('clear')
+        
+        @staticmethod
+        def pausar():
+            input("\n[+] Enter para continuar...")
+        
+        @staticmethod
+        def confirmar(msg):
+            return input(f"{msg} (s/n): ").strip().lower() == 's'
+        
+        @staticmethod
+        def formato_bytes(b):
+            for u in ['B', 'KB', 'MB', 'GB']:
+                if b < 1024:
+                    return f"{b:.1f} {u}"
+                b /= 1024
+            return f"{b:.1f} TB"
+        
+        @staticmethod
+        def formato_fecha(ts=None):
+            from datetime import datetime
+            if ts is None:
+                dt = datetime.now()
+            else:
+                dt = datetime.fromtimestamp(ts)
+            return dt.strftime('%d-%m-%Y_%H-%M')
+    
+    utils = TempUtils()
 
 # ============================================
-# LISTAR CARPETAS
-# ============================================
-
-def list_folders():
-    """Lista carpetas y permite seleccionar"""
-    ok, stdout, stderr = utils.run_command(["mega-ls", "/"])
-
-    if not ok:
-        return config.CONFIG["backup_folder"]
-
-    folders = [f for f in stdout.strip().split('\n') if f]
-
-    if not folders:
-        return config.CONFIG["backup_folder"]
-
-    print()
-    utils.print_msg("Carpetas disponibles en MEGA:", "📁")
-    for i, folder in enumerate(folders, 1):
-        print(f" {i}. /{folder}")
-    print(f" 0. Raíz /")
-    print()
-
-    choice = utils.get_input(f"Seleccioná un número o escribí una ruta (default: {config.CONFIG['backup_folder']})")
-
-    if not choice:
-        return config.CONFIG["backup_folder"]
-    elif choice.isdigit():
-        num = int(choice)
-        if num == 0:
-            return "/"
-        elif 1 <= num <= len(folders):
-            return f"/{folders[num - 1]}"
-        else:
-            return config.CONFIG["backup_folder"]
-    else:
-        return choice
-
-# ============================================
-# CREAR BACKUP
+# FUNCIÓN PRINCIPAL DE BACKUP
 # ============================================
 
 def crear_backup():
-    """Crea backup manual"""
-    utils.clear_screen()
-    utils.logger.info("=== Iniciando creación de backup manual ===")
-
-    if not megacmd.ensure_ready():
-        utils.print_msg("No se pudo preparar MegaCmd", "✖")
-        import time
-        time.sleep(3)
-        return
-
-    utils.clear_screen()
-    utils.print_msg("=== Crear Backup ===", "◰")
-    print()
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print()
-
-    server_folder = config.CONFIG["server_folder"]
-    server_path = config.safe_path(server_folder)
-
-    if not os.path.exists(server_path):
-        utils.logger.error(f"No existe la carpeta {server_folder}")
-        utils.print_msg(f"Error: No existe la carpeta {server_folder}", "✖")
+    """Crea un backup manual del servidor"""
+    
+    utils.limpiar_pantalla()
+    
+    print("\n" + "="*60)
+    print("CREAR BACKUP EN MEGA")
+    print("="*60 + "\n")
+    
+    utils.logger.info("========== INICIO BACKUP MANUAL ==========")
+    
+    try:
+        # Verificar dependencias
+        if not megacmd.verificar_megacmd():
+            utils.print_error("MegaCMD no está disponible")
+            utils.pausar()
+            return
+        
+        # Obtener configuración
+        server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
+        backup_folder = config.CONFIG.get("backup_folder", "/backups")
+        backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
+        
+        utils.logger.info(f"Configuración - Carpeta: {server_folder}, Destino: {backup_folder}")
+        
+        # Verificar que la carpeta del servidor existe
+        if not os.path.exists(server_folder):
+            utils.print_error(f"La carpeta {server_folder} no existe")
+            utils.logger.error(f"Carpeta {server_folder} no encontrada")
+            utils.pausar()
+            return
+        
+        # Calcular tamaño
+        print(f"📁 Carpeta: {server_folder}")
+        print("📊 Calculando tamaño...")
+        
+        import shutil
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(server_folder):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    total_size += os.path.getsize(filepath)
+                except:
+                    pass
+        
+        size_mb = total_size / (1024 * 1024)
+        print(f"📦 Tamaño total: {size_mb:.1f} MB\n")
+        
+        utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
+        
+        # Confirmar
+        if not utils.confirmar("¿Crear backup ahora?"):
+            print("Cancelado")
+            utils.logger.info("Backup cancelado por usuario")
+            utils.pausar()
+            return
+        
         print()
-        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print()
-        input("⏎ ⎹ Apretá enter para volver al menú de MSX")
-        utils.clear_screen()
-        utils.print_msg("Saliendo al menú de MSX...", "❰❮")
-        import time
-        time.sleep(2)
-        return
-
-    if not install_zip():
-        utils.logger.error("No se pudo instalar zip")
-        utils.print_msg("No se pudo instalar zip", "✖")
-        import time
-        time.sleep(3)
-        return
-
-    utils.print_msg(f"Se respaldará: {server_folder}", "➜")
-    print()
-
-    folder = list_folders()
-    fecha = utils.get_argentina_time().strftime("%d-%m-%Y_%H-%M")
-    backup_name = f"{config.CONFIG['backup_prefix']}_{fecha}.zip"
-
-    utils.logger.info(f"Creando backup: {backup_name} en carpeta {folder}")
-    print()
-
-    # Comprimir con spinner
-    cmd = ["zip", "-r", "-q", backup_name, server_folder]
-    utils.logger.info(f"Ejecutando comando: {' '.join(cmd)}")
-
-    proceso = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    spinner = utils.Spinner("Comprimiendo")
-
-    if spinner.start(proceso):
-        if os.path.exists(backup_name):
-            tamano_mb = os.path.getsize(backup_name) / (1024 * 1024)
-            utils.logger.info(f"Archivo creado: {backup_name} ({tamano_mb:.2f} MB)")
-            utils.print_msg(f"Archivo creado: {tamano_mb:.2f} MB", "✔")
-        else:
-            utils.logger.warning("Archivo creado pero no se encontró en disco")
-            utils.print_msg("Archivo creado", "✔")
-
-        print()
-
-        # Subir con spinner
-        utils.logger.info(f"Subiendo {backup_name} a {folder}")
-        proceso = subprocess.Popen(
-            ["mega-put", "-c", backup_name, folder],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-
-        spinner = utils.Spinner("Subiendo")
-
-        if spinner.start(proceso):
-            utils.logger.info(f"Backup subido correctamente: {backup_name}")
-            utils.print_msg("Backup subido correctamente", "✔")
-
-            os.remove(backup_name)
-            utils.logger.info(f"Archivo local eliminado: {backup_name}")
-            utils.print_msg("Archivo local eliminado", "✔")
-            print()
-
-            cleanup_old_backups(carpeta=folder)
-        else:
-            utils.logger.error(f"Error al subir backup: {backup_name}")
-            utils.print_msg("Error al subir", "✖")
-            if os.path.exists(backup_name):
+        
+        # Crear nombre de backup
+        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
+        backup_name = f"{backup_prefix}_{timestamp}.zip"
+        
+        utils.logger.info(f"Nombre de backup: {backup_name}")
+        
+        # Comprimir
+        utils.logger.info("Iniciando compresión...")
+        
+        cmd = ["zip", "-r", "-q", backup_name, server_folder]
+        proceso = subprocess.Popen(cmd)
+        
+        spinner = utils.Spinner("Comprimiendo")
+        
+        # Usar check_file para verificar el archivo
+        if not spinner.start(proceso, check_file=backup_name):
+            utils.print_error("Error al comprimir")
+            utils.logger.error("Fallo en compresión")
+            utils.pausar()
+            return
+        
+        # Verificar archivo creado
+        if not os.path.exists(backup_name):
+            utils.print_error("El archivo ZIP no se creó")
+            utils.logger.error(f"Archivo {backup_name} no encontrado")
+            utils.pausar()
+            return
+        
+        backup_size = os.path.getsize(backup_name)
+        backup_size_mb = backup_size / (1024 * 1024)
+        
+        utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
+        print(f"✓ Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)\n")
+        
+        # Subir a MEGA
+        utils.logger.info("Iniciando subida a MEGA...")
+        
+        cmd_upload = ["mega-put", backup_name, backup_folder]
+        proceso_upload = subprocess.Popen(cmd_upload, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        spinner_upload = utils.Spinner("Subiendo a MEGA")
+        if not spinner_upload.start(proceso_upload):
+            utils.print_error("Error al subir a MEGA")
+            utils.logger.error("Fallo en subida a MEGA")
+            
+            # Limpiar archivo local
+            try:
                 os.remove(backup_name)
-                utils.logger.info(f"Archivo local eliminado tras error: {backup_name}")
-    else:
-        utils.logger.error(f"Error al comprimir backup: {backup_name}")
-        utils.print_msg("Error al comprimir", "✖")
+                utils.logger.info("Archivo local eliminado tras error")
+            except:
+                pass
+            
+            utils.pausar()
+            return
+        
+        utils.logger.info(f"Backup subido exitosamente a {backup_folder}/{backup_name}")
+        
+        # Limpiar archivo local
+        try:
+            os.remove(backup_name)
+            utils.logger.info("Archivo local eliminado")
+        except Exception as e:
+            utils.print_warning(f"No se pudo eliminar archivo local: {e}")
+            utils.logger.warning(f"Error eliminando archivo local: {e}")
+        
+        # Éxito
+        print()
+        utils.print_msg(f"Backup creado exitosamente: {backup_name}")
+        utils.logger.info("========== FIN BACKUP MANUAL ==========")
+        
+        # Limpiar backups antiguos
+        print()
+        if utils.confirmar("¿Limpiar backups antiguos ahora?"):
+            limpiar_backups_antiguos()
+    
+    except Exception as e:
+        utils.print_error(f"Error creando backup: {e}")
+        utils.logger.error(f"Error en crear_backup: {e}")
+        import traceback
+        utils.logger.error(traceback.format_exc())
+    
+    utils.pausar()
 
-    print()
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print()
-    input("⏎ ⎹ Apretá enter para volver al menú de MSX")
-    utils.clear_screen()
-    utils.print_msg("Saliendo al menú de MSX...", "❰❮")
-    import time
-    time.sleep(2)
+# ============================================
+# FUNCIONES AUXILIARES
+# ============================================
+
+def limpiar_backups_antiguos():
+    """Limpia backups antiguos según configuración"""
+    
+    try:
+        max_backups = config.CONFIG.get("max_backups", 5)
+        backup_folder = config.CONFIG.get("backup_folder", "/backups")
+        backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
+        
+        utils.logger.info(f"Limpiando backups antiguos (mantener {max_backups})...")
+        
+        print(f"\n🧹 Limpiando backups antiguos (mantener últimos {max_backups})...")
+        
+        # Listar backups
+        cmd_list = ["mega-ls", backup_folder]
+        result = subprocess.run(cmd_list, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            utils.print_error("No se pudo listar backups en MEGA")
+            utils.logger.error("Error listando backups")
+            return
+        
+        # Filtrar backups
+        archivos = [line.strip() for line in result.stdout.split('\n') if backup_prefix in line and '.zip' in line]
+        archivos.sort(reverse=True)  # Más recientes primero
+        
+        utils.logger.info(f"Backups encontrados: {len(archivos)}")
+        print(f"📦 Backups encontrados: {len(archivos)}")
+        
+        if len(archivos) <= max_backups:
+            utils.print_msg("No hay backups antiguos para eliminar")
+            return
+        
+        # Eliminar antiguos
+        a_eliminar = archivos[max_backups:]
+        
+        print(f"\n🗑️  Eliminando {len(a_eliminar)} backups antiguos:")
+        
+        for archivo in a_eliminar:
+            print(f"   - {archivo}")
+            cmd_rm = ["mega-rm", f"{backup_folder}/{archivo}"]
+            result_rm = subprocess.run(cmd_rm, capture_output=True, text=True)
+            
+            if result_rm.returncode == 0:
+                utils.logger.info(f"Eliminado: {archivo}")
+            else:
+                utils.logger.warning(f"Error eliminando {archivo}")
+        
+        utils.print_msg(f"Limpieza completada - {len(a_eliminar)} backups eliminados")
+    
+    except Exception as e:
+        utils.print_error(f"Error limpiando backups: {e}")
+        utils.logger.error(f"Error en limpiar_backups_antiguos: {e}")

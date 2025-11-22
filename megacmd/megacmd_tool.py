@@ -13,7 +13,7 @@ except ImportError:
 # ============================================
 # CONFIGURACIÓN
 # ============================================
-VERSION = "1.0.1"
+VERSION = "1.0.0"
 LINKS_JSON_URL = "https://d0ce3.github.io/d0ce3-Addons/data/links.json"
 
 # Directorio base
@@ -219,6 +219,8 @@ class ModuleLoader:
             return module
             
         except Exception as e:
+            # Registrar error pero no crashear
+            print(f"⚠ Error cargando módulo {module_name}: {e}")
             return None
     
     @staticmethod
@@ -381,12 +383,21 @@ def init():
         return
     
     # Pre-cargar módulo de configuración (silencioso)
-    ModuleLoader.load_module("config")
+    config = ModuleLoader.load_module("config")
+    
+    # Si config no cargó, algo está muy mal
+    if not config:
+        print("⚠ No se pudo cargar módulo de configuración")
+        return
     
     # Inicializar autobackup si está activo (silencioso)
     autobackup = ModuleLoader.load_module("autobackup")
     if autobackup and hasattr(autobackup, 'init_on_load'):
-        autobackup.init_on_load()
+        try:
+            autobackup.init_on_load()
+        except Exception as e:
+            # No crashear si autobackup falla
+            pass
 
 # Inicializar al cargar el módulo
 init()
