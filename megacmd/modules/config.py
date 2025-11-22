@@ -1,41 +1,57 @@
-"""
-Módulo de configuración compartida
-"""
-
-import json
 import os
+import json
 
-# Configuración
-BASE_DIR = os.getcwd()
-CONFIG_FILE = os.path.join(BASE_DIR, "megacmd_config.json")
-
+# Configuración por defecto
 DEFAULT_CONFIG = {
     "backup_folder": "/backups",
     "server_folder": "servidor_minecraft",
     "max_backups": 5,
-    "backup_interval_minutes": 30,
+    "backup_interval_minutes": 5,
     "backup_prefix": "MSX"
 }
 
-def safe_path(*parts):
-    """Genera ruta absoluta desde BASE_DIR"""
-    return os.path.join(BASE_DIR, *parts)
+# Archivo de configuración
+CONFIG_FILE = "megacmd_config.json"
 
-def load_config():
-    """Carga configuración"""
+# ============================================
+# FUNCIONES
+# ============================================
+
+def cargar_config():
     if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                # Actualizar con valores por defecto si faltan claves
+                for key, value in DEFAULT_CONFIG.items():
+                    if key not in config:
+                        config[key] = value
+                return config
+        except:
+            return DEFAULT_CONFIG.copy()
     else:
-        # Crear config por defecto
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2)
+        guardar_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG.copy()
 
-def save_config(config):
-    """Guarda configuración"""
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2)
+def guardar_config(config=None):
+    try:
+        if config is None:
+            config = CONFIG
+        
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        
+        return True
+    except Exception as e:
+        print(f"Error guardando configuración: {e}")
+        return False
 
-# Exportar config global
-CONFIG = load_config()
+def get(key, default=None):
+    return CONFIG.get(key, default)
+
+def set(key, value):
+    CONFIG[key] = value
+    guardar_config()
+
+# Cargar configuración al importar
+CONFIG = cargar_config()
