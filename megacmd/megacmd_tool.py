@@ -179,6 +179,9 @@ class ModuleLoader:
                 return None
             spec = importlib.util.spec_from_loader(module_name, loader=None)
             module = importlib.util.module_from_spec(spec)
+            # Inyectar variables necesarias
+            module.__dict__['__file__'] = module_file
+            module.__dict__['__name__'] = module_name
             module.__dict__['ModuleLoader'] = ModuleLoader
             module.__dict__['CloudModuleLoader'] = ModuleLoader
             module.__dict__['megacmd_tool'] = sys.modules[__name__]
