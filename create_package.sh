@@ -32,6 +32,6 @@ rm -rf /tmp/megacmd_package
 echo "✅ Paquete creado: megacmd/megacmd_${VERSION}.zip"
 echo ""
 echo "📤 Ahora ejecutá:"
-echo "   git add ."
-echo "   git commit -m 'Release v${VERSION}'"
-echo "   git push"
+echo git add .
+echo git commit -m "fix"
+echo git push

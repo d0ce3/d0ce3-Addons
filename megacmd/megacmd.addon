@@ -10,7 +10,7 @@ download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/megacmd.addon /tmp/me
 download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/megacmd_tool.py /tmp/megacmd_temp.py
 exec mv -f /tmp/megacmd_temp.addon addons/megacmd.addon
 exec mv -f /tmp/megacmd_temp.py addons/megacmd_tool.py
-exec echo "✓ Addon actualizado"
+exec echo "✓ Addon actualizado, gracias por utilizar mi addon c: by:d0ce3"
 
 :button crear_backup
 text Crear Backup en MEGA

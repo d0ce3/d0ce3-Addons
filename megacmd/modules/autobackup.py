@@ -1,7 +1,3 @@
-"""
-Sistema de autobackup automático para MegaCMD Manager
-"""
-
 import threading
 import time
 import os
@@ -62,7 +58,6 @@ AUTOBACKUP_FILE = os.path.expanduser("~/.megacmd_autobackup")
 # ============================================
 
 def is_enabled():
-    """Verifica si el autobackup está habilitado"""
     try:
         if os.path.exists(AUTOBACKUP_FILE):
             with open(AUTOBACKUP_FILE, 'r') as f:
@@ -72,7 +67,6 @@ def is_enabled():
         return False
 
 def enable():
-    """Habilita el autobackup"""
     try:
         with open(AUTOBACKUP_FILE, 'w') as f:
             f.write('enabled')
@@ -83,7 +77,6 @@ def enable():
         return False
 
 def disable():
-    """Deshabilita el autobackup"""
     try:
         if os.path.exists(AUTOBACKUP_FILE):
             os.remove(AUTOBACKUP_FILE)
@@ -98,25 +91,21 @@ def disable():
 # ============================================
 
 def ejecutar_backup_automatico():
-    """Ejecuta un backup automático"""
     global backup_timer
     
     utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
     utils.logger.info(f"Directorio de trabajo: {os.getcwd()}")
     
     try:
-        # Verificar que el autobackup sigue habilitado
         if not is_enabled():
             utils.logger.info("Autobackup deshabilitado, cancelando ejecución")
             return
         
-        # Mostrar mensaje en terminal
         print("\n" + "="*60)
         print("⏰ AUTO-BACKUP EJECUTÁNDOSE...")
         print("="*60)
         utils.logger.info("Mensaje de inicio mostrado en terminal")
         
-        # Verificar que las dependencias están disponibles
         if not config or not backup:
             utils.logger.error("Módulos necesarios no disponibles")
             print("❌ Error: módulos no cargados")
@@ -127,18 +116,23 @@ def ejecutar_backup_automatico():
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
         
-        utils.logger.info(f"Carpeta servidor: {server_folder}")
-        utils.logger.info(f"Destino MEGA: {backup_folder}")
+        utils.logger.info(f"Configuración - Carpeta: {server_folder}, Destino: {backup_folder}")
         
-        # Verificar que la carpeta del servidor existe
-        if not os.path.exists(server_folder):
-            utils.logger.error(f"Carpeta {server_folder} no existe")
+        # Determinar ruta correcta
+        if os.path.basename(os.getcwd()) == server_folder:
+            # Ya estamos dentro de la carpeta del servidor
+            compress_target = "."
+            utils.logger.info(f"Ejecutando desde dentro del servidor: {os.getcwd()}")
+        elif os.path.exists(server_folder):
+            # La carpeta está en el directorio actual
+            compress_target = server_folder
+            utils.logger.info(f"Carpeta {server_folder} encontrada en {os.getcwd()}")
+        else:
+            utils.logger.error(f"Carpeta {server_folder} no existe en {os.getcwd()}")
             print(f"❌ Error: {server_folder} no encontrado")
             return
         
-        utils.logger.info(f"Carpeta {server_folder} verificada - existe en {os.path.abspath(server_folder)}")
-        
-        # Verificar que zip está disponible
+        # Verificar zip
         import shutil
         if not shutil.which("zip"):
             utils.logger.error("Comando zip no disponible")
@@ -153,26 +147,25 @@ def ejecutar_backup_automatico():
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         
         utils.logger.info(f"Nombre de backup: {backup_name}")
-        utils.logger.info(f"Destino MEGA: {backup_folder}")
+        utils.logger.info(f"Target de compresión: {compress_target}")
         
         # Comprimir
         import subprocess
         
-        cmd = ["zip", "-r", "-q", backup_name, server_folder]
-        utils.logger.info(f"Iniciando compresión: {' '.join(cmd)}")
+        cmd = ["zip", "-r", "-q", backup_name, compress_target]
+        utils.logger.info(f"Comando: {' '.join(cmd)}")
         
         proceso = subprocess.Popen(cmd)
-        utils.logger.info(f"Proceso de compresión iniciado - PID: {proceso.pid}")
+        utils.logger.info(f"Proceso iniciado - PID: {proceso.pid}")
         
         spinner = utils.Spinner("Comprimiendo")
         
-        # Usar check_file para verificar el archivo en vez del returncode
         if not spinner.start(proceso, check_file=backup_name):
             utils.logger.error("Error al comprimir")
             print("❌ Error en compresión")
             return
         
-        # Verificar tamaño del archivo
+        # Verificar archivo
         if os.path.exists(backup_name):
             size = os.path.getsize(backup_name)
             size_mb = size / (1024 * 1024)
@@ -194,7 +187,6 @@ def ejecutar_backup_automatico():
         if not spinner_upload.start(proceso_upload):
             utils.logger.error("Error al subir a MEGA")
             print("❌ Error en subida")
-            # Limpiar archivo local aunque falle la subida
             try:
                 os.remove(backup_name)
                 utils.logger.info(f"Archivo local {backup_name} eliminado")
@@ -217,17 +209,15 @@ def ejecutar_backup_automatico():
             max_backups = config.CONFIG.get("max_backups", 5)
             utils.logger.info(f"Limpiando backups antiguos (mantener últimos {max_backups})...")
             
-            # Listar backups
             cmd_list = ["mega-ls", backup_folder]
             result = subprocess.run(cmd_list, capture_output=True, text=True)
             
             if result.returncode == 0:
                 archivos = [line.strip() for line in result.stdout.split('\n') if backup_prefix in line and '.zip' in line]
-                archivos.sort(reverse=True)  # Más recientes primero
+                archivos.sort(reverse=True)
                 
                 utils.logger.info(f"Backups encontrados: {len(archivos)}")
                 
-                # Eliminar los más antiguos
                 if len(archivos) > max_backups:
                     a_eliminar = archivos[max_backups:]
                     utils.logger.info(f"Eliminando {len(a_eliminar)} backups antiguos")
@@ -252,7 +242,6 @@ def ejecutar_backup_automatico():
     finally:
         utils.logger.info("========== FIN BACKUP AUTOMÁTICO ==========")
         
-        # Programar próximo backup
         if is_enabled():
             start_autobackup()
 
@@ -261,10 +250,8 @@ def ejecutar_backup_automatico():
 # ============================================
 
 def start_autobackup():
-    """Inicia el sistema de autobackup"""
     global backup_timer
     
-    # Cancelar timer existente si hay
     if backup_timer:
         try:
             backup_timer.cancel()
@@ -280,7 +267,6 @@ def start_autobackup():
         utils.logger.info(f"Nuevo timer programado para {config.CONFIG['backup_interval_minutes']} minutos")
 
 def stop_autobackup():
-    """Detiene el sistema de autobackup"""
     global backup_timer
     
     if backup_timer:
@@ -293,22 +279,18 @@ def stop_autobackup():
 # ============================================
 
 def toggle_autobackup():
-    """Menú de configuración de autobackup"""
-    
     utils.limpiar_pantalla()
     
     print("\n" + "="*60)
     print("CONFIGURAR AUTOBACKUP")
     print("="*60 + "\n")
     
-    # Mostrar estado actual
     if is_enabled():
         print("Estado actual: ACTIVADO ✔")
         print(f"El autobackup creará backups cada {config.CONFIG['backup_interval_minutes']} minutos\n")
     else:
         print("Estado actual: DESACTIVADO ✖\n")
     
-    # Menú
     print("1. Activar autobackup")
     print("2. Desactivar autobackup")
     print("3. Configurar intervalo")
@@ -348,7 +330,6 @@ def toggle_autobackup():
                 config.CONFIG["backup_interval_minutes"] = nuevo_intervalo
                 config.guardar_config()
                 
-                # Reiniciar timer si está activo
                 if is_enabled():
                     start_autobackup()
                 
@@ -367,4 +348,13 @@ def toggle_autobackup():
         else:
             print("Cancelado")
     
-    utils
+    utils.pausar()
+
+# ============================================
+# INICIALIZACIÓN
+# ============================================
+
+def init_on_load():
+    if is_enabled():
+        start_autobackup()
+        utils.logger.info(f"Autobackup activado - cada {config.CONFIG['backup_interval_minutes']} minutos")
