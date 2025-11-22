@@ -62,17 +62,13 @@ def ejecutar_backup_automatico():
 def start_autobackup(interval_minutes=3):
     global backup_timer, backup_timer_created_at
 
-    now = datetime.now()
+    # Si el timer ya está activo, no hacer nada
+    if backup_timer is not None and backup_timer.is_alive():
+        utils.logger.info("Timer de autobackup ya activo, no se crea uno nuevo")
+        return
 
-    if backup_timer is not None:
-        elapsed = now - backup_timer_created_at
-        if elapsed < timedelta(minutes=interval_minutes):
-            utils.logger.info(f"[SALTEAR] Timer de autobackup ya activo, creado hace {elapsed}")
-            return
-        else:
-            utils.logger.info("Timer anterior expirado, cancelando y creando uno nuevo")
-            backup_timer.cancel()
-            backup_timer = None
+    now = datetime.now()
+    backup_timer_created_at = now
 
     def timer_callback():
         global backup_timer
@@ -86,7 +82,6 @@ def start_autobackup(interval_minutes=3):
     utils.logger.info(f"Nuevo timer programado para {interval_minutes} minutos")
     utils.logger.info(f"Autobackup activado - cada {interval_minutes} minutos")
     backup_timer = threading.Timer(interval_minutes * 60, timer_callback)
-    backup_timer_created_at = now
     backup_timer.daemon = True
     backup_timer.start()
 

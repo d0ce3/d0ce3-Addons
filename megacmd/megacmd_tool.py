@@ -1,10 +1,8 @@
 import sys
-
 import os
-
 import importlib.util
-
 import json
+import time
 
 try:
     import readline
@@ -22,6 +20,9 @@ CACHE_DIR = os.path.join(BASE_DIR, "__megacmd_cache__")
 
 PACKAGE_DIR = os.path.join(CACHE_DIR, "modules")
 
+# Flag global para controlar inicialización única del AUTOBACKUP
+autobackup_initialized = False
+
 def ensure_requests():
     try:
         import requests
@@ -34,6 +35,7 @@ def ensure_requests():
             subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
         import requests
         return requests
+
 requests = ensure_requests()
 
 class ConfigManager:
@@ -147,6 +149,7 @@ class ModuleLoader:
 
     @staticmethod
     def reload_all():
+        global autobackup_initialized
         print("\n" + "="*60)
         print("🔄 ACTUALIZANDO DESDE GITHUB PAGES")
         print("="*60 + "\n")
@@ -168,6 +171,8 @@ class ModuleLoader:
         print()
         print("📥 Descargando paquete actualizado...")
         if PackageManager.download_and_extract():
+            # Resetear el flag de autobackup cuando se actualizan los módulos
+            autobackup_initialized = False
             print("="*60)
             print("✅ ACTUALIZACIÓN COMPLETADA")
             print("="*60)
@@ -255,22 +260,39 @@ def actualizar_modulos():
             print("\n❌ Hubo un error durante la actualización")
             print("💡 Verificá tu conexión a internet")
     else:
-        print("\n❌ Actualización cancelada")
+        print("\nâŒ Actualización cancelada")
         print("\n" + "="*60 + "\n")
     input("Presioná Enter para continuar...")
 
 def init():
+    global autobackup_initialized
+    
+    # Cargar configuración
     ConfigManager.load()
+    
+    # Asegurar que los paquetes están instalados
     if not PackageManager.ensure_installed():
         return
+    
+    # Cargar módulos necesarios
     config = ModuleLoader.load_module("config")
     if not config:
         print("⚠ No se pudo cargar módulo de configuración")
         return
+    
+    utils = ModuleLoader.load_module("utils")
     autobackup = ModuleLoader.load_module("autobackup")
-    if autobackup and hasattr(autobackup, 'init_on_load'):
+    
+    # Control para que init_on_load se ejecute una sola vez
+    if autobackup and hasattr(autobackup, 'init_on_load') and not autobackup_initialized:
         try:
             autobackup.init_on_load()
-        except Exception:
-            pass
+            autobackup_initialized = True
+            if utils and hasattr(utils, 'logger'):
+                utils.logger.info("Autobackup iniciado correctamente")
+        except Exception as e:
+            if utils and hasattr(utils, 'logger'):
+                utils.logger.error(f"Error inicializando autobackup: {e}")
+
+# Inicializar el sistema
 init()

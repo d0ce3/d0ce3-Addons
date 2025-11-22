@@ -17,13 +17,7 @@ def ejecutar_backup_manual():
             utils.pausar()
             return
 
-        server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
-        server_folder = os.path.abspath(server_folder_config)
-        print(f"Ruta configurada servidor_minecraft: {server_folder_config}")
-        print(f"Ruta absoluta servidor_minecraft: {server_folder}")
-        cwd = os.getcwd()
-        print(f"Directorio de trabajo actual: {cwd}")
-
+        server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
 
@@ -32,7 +26,7 @@ def ejecutar_backup_manual():
         if not os.path.exists(server_folder):
             utils.print_error(f"La carpeta {server_folder} no existe")
             utils.logger.error(f"Carpeta {server_folder} no encontrada")
-            # En este caso no pausa, simplemente retorna para evitar error fatal
+            utils.pausar()
             return
 
         print(f"📁 Carpeta: {server_folder}")
@@ -122,14 +116,67 @@ def ejecutar_backup_manual():
 
 def ejecutar_backup_automatico():
     utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
-    print("Backup automático iniciado...")
     try:
-        ejecutar_backup_manual()
-    except Exception as e:
-        utils.logger.error(f"Error durante backup automático: {str(e)}")
-    finally:
+        server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
+        backup_folder = config.CONFIG.get("backup_folder", "/backups")
+        backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
+
+        utils.logger.info(f"Configuración - Carpeta: {server_folder}, Destino: {backup_folder}")
+
+        if not os.path.exists(server_folder):
+            utils.logger.error(f"Carpeta {server_folder} no encontrada, se cancela backup automático")
+            return
+
+        # logística igual a backup manual pero sin mensajes ni pausas
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(server_folder):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    total_size += os.path.getsize(filepath)
+                except:
+                    pass
+        size_mb = total_size / (1024 * 1024)
+        utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
+
+        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
+        backup_name = f"{backup_prefix}_{timestamp}.zip"
+        utils.logger.info(f"Nombre de backup: {backup_name}")
+
+        # compresión
+        cmd = ["zip", "-r", "-q", backup_name, server_folder]
+        proceso = subprocess.run(cmd)
+        if proceso.returncode != 0 or not os.path.exists(backup_name):
+            utils.logger.error("Error durante compresión automática")
+            return
+
+        backup_size = os.path.getsize(backup_name)
+        backup_size_mb = backup_size / (1024 * 1024)
+        utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
+
+        # subida a MEGA
+        cmd_upload = ["mega-put", backup_name, backup_folder]
+        proceso_upload = subprocess.run(cmd_upload)
+        if proceso_upload.returncode != 0:
+            utils.logger.error("Error al subir backup automático a MEGA")
+            try:
+                os.remove(backup_name)
+            except:
+                pass
+            return
+
+        utils.logger.info(f"Backup automático subido exitosamente: {backup_folder}/{backup_name}")
+
+        try:
+            os.remove(backup_name)
+            utils.logger.info("Archivo local eliminado")
+        except Exception as e:
+            utils.logger.warning(f"No se pudo eliminar archivo local: {e}")
+
         utils.logger.info("========== FIN BACKUP AUTOMÁTICO ==========")
-        print("Backup automático terminado.")
+
+    except Exception as e:
+        utils.logger.error(f"Error en backup automático: {str(e)}")
 
 def limpiar_backups_antiguos():
     try:
@@ -137,31 +184,24 @@ def limpiar_backups_antiguos():
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
         utils.logger.info(f"Limpiando backups antiguos (mantener {max_backups})...")
-        print(f"\n🧹 Limpiando backups antiguos (mantener últimos {max_backups})...")
         cmd_list = ["mega-ls", backup_folder]
         result = subprocess.run(cmd_list, capture_output=True, text=True)
         if result.returncode != 0:
-            utils.print_error("No se pudo listar backups en MEGA")
             utils.logger.error("Error listando backups")
             return
         archivos = [line.strip() for line in result.stdout.split('\n') if backup_prefix in line and '.zip' in line]
         archivos.sort(reverse=True)
         utils.logger.info(f"Backups encontrados: {len(archivos)}")
-        print(f"📦 Backups encontrados: {len(archivos)}")
         if len(archivos) <= max_backups:
-            utils.print_msg("No hay backups antiguos para eliminar")
             return
         a_eliminar = archivos[max_backups:]
-        print(f"\n🗑️ Eliminando {len(a_eliminar)} backups antiguos:")
         for archivo in a_eliminar:
-            print(f" - {archivo}")
             cmd_rm = ["mega-rm", f"{backup_folder}/{archivo}"]
             result_rm = subprocess.run(cmd_rm, capture_output=True, text=True)
             if result_rm.returncode == 0:
                 utils.logger.info(f"Eliminado: {archivo}")
             else:
                 utils.logger.warning(f"Error eliminando {archivo}")
-        utils.print_msg(f"Limpieza completada - {len(a_eliminar)} backups eliminados")
+        utils.logger.info(f"Limpieza completada - {len(a_eliminar)} backups eliminados")
     except Exception as e:
-        utils.print_error(f"Error limpiando backups: {e}")
         utils.logger.error(f"Error en limpiar_backups_antiguos: {e}")
