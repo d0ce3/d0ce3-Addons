@@ -172,6 +172,11 @@ def ejecutar_backup_manual():
 def ejecutar_backup_automatico():
     utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
     try:
+        # CORRECCIÓN: Verificar si está habilitado antes de continuar
+        if not config.CONFIG.get("autobackup_enabled", False):
+            utils.logger.info("Autobackup desactivado, no se ejecutará")
+            return
+
         # Obtener ruta y resolverla correctamente
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
         # CORRECCIÓN: Usar encontrar_carpeta_servidor en lugar de resolver_ruta_servidor
@@ -271,3 +276,148 @@ def limpiar_backups_antiguos():
         utils.logger.info(f"Limpieza completada - {len(a_eliminar)} backups eliminados")
     except Exception as e:
         utils.logger.error(f"Error en limpiar_backups_antiguos: {e}")
+
+def configurar_autobackup():
+    """
+    Configura el autobackup de forma interactiva.
+    Se integra con config.py y utils.py existentes.
+    """
+    utils.limpiar_pantalla()
+    print("\n" + "=" * 60)
+    print("CONFIGURAR AUTOBACKUP")
+    print("=" * 60 + "\n")
+    
+    # Mostrar configuración actual
+    autobackup_enabled = config.CONFIG.get("autobackup_enabled", False)
+    intervalo_actual = config.CONFIG.get("backup_interval_minutes", 5)
+    backup_folder = config.CONFIG.get("backup_folder", "/backups")
+    server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
+    max_backups = config.CONFIG.get("max_backups", 5)
+    backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
+    
+    print("📋 CONFIGURACIÓN ACTUAL:")
+    print(f"   Estado: {'✓ ACTIVADO' if autobackup_enabled else '✗ DESACTIVADO'}")
+    print(f"   Intervalo: cada {intervalo_actual} minutos")
+    print(f"   Carpeta servidor: {server_folder}")
+    print(f"   Destino MEGA: {backup_folder}")
+    print(f"   Prefijo backup: {backup_prefix}")
+    print(f"   Máximo backups: {max_backups}")
+    print()
+    
+    utils.logger.info("========== CONFIGURAR AUTOBACKUP ==========")
+    
+    # Preguntar si activar/desactivar
+    if autobackup_enabled:
+        if utils.confirmar("¿Desactivar autobackup?"):
+            config.set("autobackup_enabled", False)
+            utils.print_msg("Autobackup desactivado")
+            utils.logger.info("Autobackup desactivado por usuario")
+            utils.pausar()
+            return
+        else:
+            print("\nAutobackup sigue activado. Puede modificar la configuración:\n")
+    else:
+        if not utils.confirmar("¿Activar autobackup?"):
+            print("Cancelado")
+            utils.logger.info("Configuración de autobackup cancelada")
+            utils.pausar()
+            return
+    
+    # Configurar intervalo
+    print(f"\n⏱️  Intervalo actual: {intervalo_actual} minutos")
+    if utils.confirmar("¿Cambiar intervalo?"):
+        while True:
+            try:
+                nuevo_intervalo = input("   Nuevo intervalo en minutos (1-60): ").strip()
+                nuevo_intervalo = int(nuevo_intervalo)
+                if 1 <= nuevo_intervalo <= 60:
+                    intervalo_actual = nuevo_intervalo
+                    break
+                else:
+                    utils.print_warning("Intervalo debe estar entre 1 y 60 minutos")
+            except ValueError:
+                utils.print_warning("Ingrese un número válido")
+            except KeyboardInterrupt:
+                print("\nCancelado")
+                utils.pausar()
+                return
+    
+    # Configurar carpeta servidor
+    print(f"\n📁 Carpeta servidor actual: {server_folder}")
+    if utils.confirmar("¿Cambiar carpeta del servidor?"):
+        nueva_carpeta = input("   Nueva carpeta: ").strip()
+        if nueva_carpeta:
+            server_folder = nueva_carpeta
+            utils.logger.info(f"Carpeta servidor cambiada a: {nueva_carpeta}")
+    
+    # Configurar destino MEGA
+    print(f"\n☁️  Destino MEGA actual: {backup_folder}")
+    if utils.confirmar("¿Cambiar carpeta destino en MEGA?"):
+        nuevo_destino = input("   Nueva carpeta MEGA (ej: /backups): ").strip()
+        if nuevo_destino:
+            # Asegurar que empiece con /
+            if not nuevo_destino.startswith("/"):
+                nuevo_destino = "/" + nuevo_destino
+            backup_folder = nuevo_destino
+            utils.logger.info(f"Destino MEGA cambiado a: {nuevo_destino}")
+    
+    # Configurar prefijo de backup
+    print(f"\n🏷️  Prefijo actual: {backup_prefix}")
+    if utils.confirmar("¿Cambiar prefijo de backups?"):
+        nuevo_prefijo = input("   Nuevo prefijo (ej: MSX): ").strip()
+        if nuevo_prefijo:
+            backup_prefix = nuevo_prefijo
+            utils.logger.info(f"Prefijo cambiado a: {nuevo_prefijo}")
+    
+    # Configurar máximo de backups
+    print(f"\n🗂️  Máximo de backups: {max_backups}")
+    if utils.confirmar("¿Cambiar cantidad máxima de backups?"):
+        while True:
+            try:
+                nuevo_max = input("   Cantidad máxima (1-20): ").strip()
+                nuevo_max = int(nuevo_max)
+                if 1 <= nuevo_max <= 20:
+                    max_backups = nuevo_max
+                    break
+                else:
+                    utils.print_warning("Cantidad debe estar entre 1 y 20")
+            except ValueError:
+                utils.print_warning("Ingrese un número válido")
+            except KeyboardInterrupt:
+                print("\nCancelado")
+                utils.pausar()
+                return
+    
+    # Mostrar resumen y confirmar
+    print("\n" + "=" * 60)
+    print("RESUMEN DE CONFIGURACIÓN")
+    print("=" * 60)
+    print(f"✓ Estado: ACTIVADO")
+    print(f"✓ Intervalo: cada {intervalo_actual} minutos")
+    print(f"✓ Carpeta servidor: {server_folder}")
+    print(f"✓ Destino MEGA: {backup_folder}")
+    print(f"✓ Prefijo: {backup_prefix}")
+    print(f"✓ Máximo backups: {max_backups}")
+    print("=" * 60 + "\n")
+    
+    if utils.confirmar("¿Guardar esta configuración?"):
+        # Guardar toda la configuración
+        config.set("autobackup_enabled", True)
+        config.set("backup_interval_minutes", intervalo_actual)
+        config.set("server_folder", server_folder)
+        config.set("backup_folder", backup_folder)
+        config.set("backup_prefix", backup_prefix)
+        config.set("max_backups", max_backups)
+        
+        utils.print_msg("Configuración guardada exitosamente")
+        utils.logger.info(f"Autobackup configurado: intervalo={intervalo_actual}min, destino={backup_folder}, max={max_backups}")
+        
+        if autobackup_enabled:
+            print("\n⚠️  Nota: Reinicie el proceso de autobackup para aplicar los cambios")
+        else:
+            print("\n✓ Autobackup activado con la nueva configuración")
+    else:
+        print("Configuración cancelada")
+        utils.logger.info("Configuración cancelada por usuario")
+    
+    utils.pausar()
