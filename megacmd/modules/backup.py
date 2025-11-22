@@ -2,78 +2,10 @@ import os
 import subprocess
 from datetime import datetime
 
-# Cargar dependencias
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
-megacmd = CloudModuleLoader.load_module("megacmd")
-autobackup = CloudModuleLoader.load_module("autobackup")
 
-# Verificar que utils cargó correctamente
-if not utils:
-    import logging
-    logger = logging.getLogger('megacmd')
-
-    class TempUtils:
-        logger = logger
-
-        @staticmethod
-        def print_msg(msg, icono="✓"):
-            print(f"{icono} ⎹ {msg}")
-
-        @staticmethod
-        def print_error(msg):
-            print(f"✖ ⎹ {msg}")
-
-        @staticmethod
-        def print_warning(msg):
-            print(f"⚠ ⎹ {msg}")
-
-        @staticmethod
-        def Spinner(msg):
-            class DummySpinner:
-                def __init__(self, mensaje):
-                    self.mensaje = mensaje
-
-                def start(self, proceso, check_file=None):
-                    proceso.wait()
-                    return True
-
-            return DummySpinner(msg)
-
-        @staticmethod
-        def limpiar_pantalla():
-            os.system('clear')
-
-        @staticmethod
-        def pausar():
-            input("\n[+] Enter para continuar...")
-
-        @staticmethod
-        def confirmar(msg):
-            return input(f"{msg} (s/n): ").strip().lower() == 's'
-
-        @staticmethod
-        def formato_bytes(b):
-            for u in ['B', 'KB', 'MB', 'GB']:
-                if b < 1024:
-                    return f"{b:.1f} {u}"
-                b /= 1024
-            return f"{b:.1f} TB"
-
-    utils = TempUtils()
-
-def _pause_autobackup():
-    if autobackup.is_enabled():
-        autobackup.stop_autobackup()
-        return True
-    return False
-
-def _resume_autobackup(was_enabled):
-    if was_enabled:
-        autobackup.start_autobackup()
-
-def crear_backup():
-    was_enabled = _pause_autobackup()
+def ejecutar_backup_manual():
     utils.limpiar_pantalla()
     print("\n" + "=" * 60)
     print("CREAR BACKUP EN MEGA")
@@ -190,9 +122,7 @@ def crear_backup():
         import traceback
         utils.logger.error(traceback.format_exc())
 
-    finally:
-        _resume_autobackup(was_enabled)
-        utils.pausar()
+    utils.pausar()
 
 def limpiar_backups_antiguos():
     try:
