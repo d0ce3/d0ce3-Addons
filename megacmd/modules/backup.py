@@ -63,7 +63,8 @@ def ejecutar_backup_manual():
 
         # Obtener ruta y resolverla correctamente
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
-        server_folder = resolver_ruta_servidor(server_folder_config)
+        # CORRECCIÓN: Usar encontrar_carpeta_servidor en lugar de resolver_ruta_servidor
+        server_folder = encontrar_carpeta_servidor(server_folder_config)
             
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
@@ -73,12 +74,13 @@ def ejecutar_backup_manual():
         utils.logger.info(f"Configuración - os.getcwd(): {os.getcwd()}")
         utils.logger.info(f"Configuración - parent de BASE_DIR: {os.path.dirname(config.BASE_DIR)}")
         utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
-        utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder)}")
+        utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder) if server_folder else False}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
-        if not os.path.exists(server_folder):
-            utils.print_error(f"La carpeta {server_folder} no existe")
-            utils.logger.error(f"Carpeta {server_folder} no encontrada")
+        # Verificar que se encontró la carpeta
+        if not server_folder or not os.path.exists(server_folder):
+            utils.print_error(f"La carpeta {server_folder_config} no se pudo encontrar")
+            utils.logger.error(f"Carpeta {server_folder_config} no encontrada")
             utils.pausar()
             return
 
@@ -172,7 +174,8 @@ def ejecutar_backup_automatico():
     try:
         # Obtener ruta y resolverla correctamente
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
-        server_folder = resolver_ruta_servidor(server_folder_config)
+        # CORRECCIÓN: Usar encontrar_carpeta_servidor en lugar de resolver_ruta_servidor
+        server_folder = encontrar_carpeta_servidor(server_folder_config)
             
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
@@ -182,11 +185,12 @@ def ejecutar_backup_automatico():
         utils.logger.info(f"Configuración - os.getcwd(): {os.getcwd()}")
         utils.logger.info(f"Configuración - parent de BASE_DIR: {os.path.dirname(config.BASE_DIR)}")
         utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
-        utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder)}")
+        utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder) if server_folder else False}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
-        if not os.path.exists(server_folder):
-            utils.logger.error(f"Carpeta {server_folder} no encontrada, se cancela backup automático")
+        # Verificar que se encontró la carpeta
+        if not server_folder or not os.path.exists(server_folder):
+            utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
             return
 
         # logística igual a backup manual pero sin mensajes ni pausas

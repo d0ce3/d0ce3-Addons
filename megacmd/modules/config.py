@@ -1,28 +1,31 @@
 import os
+import sys
 import json
 
-# Directorio base - inyectado por ModuleLoader desde megacmd_tool.py
-# SCRIPT_BASE_DIR es el directorio donde está megacmd_tool.py
-try:
-    # SCRIPT_BASE_DIR es inyectado por ModuleLoader
-    BASE_DIR = SCRIPT_BASE_DIR
-except NameError:
-    # Fallback: intentar calcular desde __file__
+# CORRECCIÓN: Detectar si está empaquetado con PyInstaller
+if getattr(sys, 'frozen', False):
+    # Si está empaquetado, usar el directorio del ejecutable
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # Modo desarrollo
     try:
-        module_dir = os.path.dirname(os.path.abspath(__file__))
-        if module_dir.endswith(os.path.join("__megacmd_cache__", "modules")):
-            cache_dir = os.path.dirname(module_dir)
-            BASE_DIR = os.path.dirname(cache_dir)
-        else:
-            BASE_DIR = module_dir
+        # SCRIPT_BASE_DIR es inyectado por ModuleLoader
+        BASE_DIR = SCRIPT_BASE_DIR
     except NameError:
-        # Último fallback
-        BASE_DIR = os.getcwd()
+        # Fallback: intentar calcular desde __file__
+        try:
+            module_dir = os.path.dirname(os.path.abspath(__file__))
+            if module_dir.endswith(os.path.join("__megacmd_cache__", "modules")):
+                cache_dir = os.path.dirname(module_dir)
+                BASE_DIR = os.path.dirname(cache_dir)
+            else:
+                BASE_DIR = module_dir
+        except NameError:
+            # Último fallback
+            BASE_DIR = os.getcwd()
 
 # Log para debug
-import sys
-if hasattr(sys, 'stderr'):
-    print(f"[CONFIG DEBUG] BASE_DIR establecido en: {BASE_DIR}", file=sys.stderr)
+print(f"[CONFIG DEBUG] BASE_DIR establecido en: {BASE_DIR}", file=sys.stderr)
 
 # Configuración por defecto
 DEFAULT_CONFIG = {
