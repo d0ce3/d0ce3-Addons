@@ -1,35 +1,25 @@
 import os
 import json
 
-# Directorio base - donde se encuentra el script principal
-# Esto se usa como referencia para rutas relativas
+# Directorio base - inyectado por ModuleLoader desde megacmd_tool.py
+# SCRIPT_BASE_DIR es el directorio donde está megacmd_tool.py
 try:
-    # __file__ es inyectado por ModuleLoader
-    # Ejemplo: /workspaces/Dregoro/servidor_minecraft/__megacmd_cache__/modules/config.py
-    module_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Si estamos en __megacmd_cache__/modules, subir hasta el directorio raíz del proyecto
-    if module_dir.endswith(os.path.join("__megacmd_cache__", "modules")):
-        # modules -> __megacmd_cache__ -> directorio del script (servidor_minecraft)
-        cache_dir = os.path.dirname(module_dir)  # __megacmd_cache__
-        script_dir = os.path.dirname(cache_dir)  # servidor_minecraft
-        
-        # Verificar si megacmd_tool.py está en este directorio
-        if os.path.exists(os.path.join(script_dir, "megacmd_tool.py")):
-            # Este ES el directorio del script, usar este como base
-            BASE_DIR = script_dir
-        else:
-            # El script debe estar un nivel arriba
-            BASE_DIR = os.path.dirname(script_dir)
-    else:
-        # Caso normal: usar el directorio del módulo
-        BASE_DIR = module_dir
-        
+    # SCRIPT_BASE_DIR es inyectado por ModuleLoader
+    BASE_DIR = SCRIPT_BASE_DIR
 except NameError:
-    # Fallback si __file__ no está disponible
-    BASE_DIR = os.getcwd()
+    # Fallback: intentar calcular desde __file__
+    try:
+        module_dir = os.path.dirname(os.path.abspath(__file__))
+        if module_dir.endswith(os.path.join("__megacmd_cache__", "modules")):
+            cache_dir = os.path.dirname(module_dir)
+            BASE_DIR = os.path.dirname(cache_dir)
+        else:
+            BASE_DIR = module_dir
+    except NameError:
+        # Último fallback
+        BASE_DIR = os.getcwd()
 
-# Log para debug (se puede comentar después)
+# Log para debug
 import sys
 if hasattr(sys, 'stderr'):
     print(f"[CONFIG DEBUG] BASE_DIR establecido en: {BASE_DIR}", file=sys.stderr)

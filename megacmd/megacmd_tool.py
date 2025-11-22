@@ -201,6 +201,8 @@ class ModuleLoader:
             module.__dict__['ModuleLoader'] = ModuleLoader
             module.__dict__['CloudModuleLoader'] = ModuleLoader
             module.__dict__['megacmd_tool'] = sys.modules[__name__]
+            # CRÍTICO: Inyectar BASE_DIR del script principal
+            module.__dict__['SCRIPT_BASE_DIR'] = BASE_DIR
             exec(source_code, module.__dict__)
             sys.modules[module_name] = module
             ModuleLoader._cache[module_name] = module
@@ -368,3 +370,18 @@ def init():
 
 # Inicializar el sistema
 init()
+
+# Registrar limpieza al salir
+def cleanup_on_exit():
+    """Limpia el flag de autobackup cuando el programa termina"""
+    try:
+        # Solo limpiar si el PID coincide
+        if os.path.exists(AUTOBACKUP_FLAG_FILE):
+            with open(AUTOBACKUP_FLAG_FILE, 'r') as f:
+                data = json.load(f)
+                if data.get('pid') == os.getpid():
+                    AutobackupManager.clear_flag()
+    except:
+        pass
+
+atexit.register(cleanup_on_exit)
