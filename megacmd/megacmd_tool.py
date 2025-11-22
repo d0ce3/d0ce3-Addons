@@ -3,6 +3,8 @@ import os
 import importlib.util
 import json
 import time
+import atexit
+import signal
 
 try:
     import readline
@@ -126,10 +128,23 @@ class AutobackupManager:
         try:
             with open(AUTOBACKUP_FLAG_FILE, 'r') as f:
                 data = json.load(f)
-                # Verificar que no haya pasado más de 1 hora (sesión caducada)
+                # Verificar que no haya pasado más de 2 horas (sesión caducada)
                 init_time = data.get('init_time', 0)
-                if time.time() - init_time > 3600:
+                elapsed = time.time() - init_time
+                if elapsed > 7200:  # 2 horas
                     return False
+                # Verificar que el PID del proceso sea válido
+                pid = data.get('pid', 0)
+                if pid != os.getpid():
+                    # Es de otro proceso, verificar si todavía existe
+                    try:
+                        # En Unix, esto verifica si el proceso existe
+                        os.kill(pid, 0)
+                        # El proceso existe, está inicializado
+                        return True
+                    except (OSError, ProcessLookupError):
+                        # El proceso ya no existe, podemos reinicializar
+                        return False
                 return True
         except:
             return False
@@ -142,7 +157,8 @@ class AutobackupManager:
             with open(AUTOBACKUP_FLAG_FILE, 'w') as f:
                 json.dump({
                     'init_time': time.time(),
-                    'version': VERSION
+                    'version': VERSION,
+                    'pid': os.getpid()
                 }, f)
             return True
         except:
@@ -330,20 +346,25 @@ def init():
     # Verificar si el autobackup ya fue inicializado
     if AutobackupManager.is_initialized():
         if utils and hasattr(utils, 'logger'):
-            utils.logger.info("Autobackup ya inicializado previamente - omitiendo")
+            utils.logger.debug("Autobackup ya inicializado - omitiendo (PID: {})".format(os.getpid()))
         return
     
     # Cargar e inicializar autobackup solo si no fue inicializado antes
     autobackup = ModuleLoader.load_module("autobackup")
     if autobackup and hasattr(autobackup, 'init_on_load'):
         try:
-            autobackup.init_on_load()
+            # Marcar ANTES de inicializar para prevenir race conditions
             AutobackupManager.mark_initialized()
+            autobackup.init_on_load()
             if utils and hasattr(utils, 'logger'):
-                utils.logger.info("Autobackup iniciado correctamente (primera vez)")
+                utils.logger.info("Autobackup iniciado correctamente - PID: {}".format(os.getpid()))
         except Exception as e:
+            # Si falla, limpiar el flag para permitir reintentos
+            AutobackupManager.clear_flag()
             if utils and hasattr(utils, 'logger'):
                 utils.logger.error(f"Error inicializando autobackup: {e}")
+                import traceback
+                utils.logger.error(traceback.format_exc())
 
 # Inicializar el sistema
 init()
