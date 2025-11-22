@@ -17,11 +17,15 @@ def ejecutar_backup_manual():
             utils.pausar()
             return
 
-        server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
+        # Convertir ruta relativa a absoluta
+        server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
+        server_folder = os.path.abspath(server_folder_config)
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
 
-        utils.logger.info(f"Configuración - Carpeta: {server_folder}, Destino: {backup_folder}")
+        utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
+        utils.logger.info(f"Configuración - Carpeta absoluta: {server_folder}")
+        utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
         if not os.path.exists(server_folder):
             utils.print_error(f"La carpeta {server_folder} no existe")
@@ -117,11 +121,15 @@ def ejecutar_backup_manual():
 def ejecutar_backup_automatico():
     utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
     try:
-        server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
+        # Convertir ruta relativa a absoluta
+        server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
+        server_folder = os.path.abspath(server_folder_config)
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
 
-        utils.logger.info(f"Configuración - Carpeta: {server_folder}, Destino: {backup_folder}")
+        utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
+        utils.logger.info(f"Configuración - Carpeta absoluta: {server_folder}")
+        utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
         if not os.path.exists(server_folder):
             utils.logger.error(f"Carpeta {server_folder} no encontrada, se cancela backup automático")
