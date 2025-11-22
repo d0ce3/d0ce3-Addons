@@ -1,3 +1,7 @@
+"""
+Utilidades compartidas para MegaCMD Manager
+"""
+
 import os
 import sys
 import logging
@@ -11,17 +15,37 @@ from datetime import datetime
 logger = logging.getLogger('megacmd')
 logger.setLevel(logging.INFO)
 
+# Ruta del log - usar directorio actual ya que __file__ puede no estar definido
+try:
+    # Intentar determinar la mejor ruta para el log
+    log_file = os.path.join(os.getcwd(), 'addons', 'megacmd_backup.log')
+    
+    # Asegurar que el directorio existe
+    log_dir = os.path.dirname(log_file)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+except:
+    # Si falla, usar directorio actual
+    log_file = 'megacmd_backup.log'
+
 # Handler para archivo
-log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'megacmd_backup.log')
-file_handler = logging.FileHandler(log_file, encoding='utf-8')
-file_handler.setLevel(logging.INFO)
-
-# Formato del log
-formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-file_handler.setFormatter(formatter)
-
-# Agregar handler
-logger.addHandler(file_handler)
+try:
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    
+    # Formato del log
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    file_handler.setFormatter(formatter)
+    
+    # Agregar handler
+    logger.addHandler(file_handler)
+except Exception as e:
+    # Fallback a consola si no se puede crear archivo
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
 # ============================================
 # FUNCIONES DE UTILIDAD
