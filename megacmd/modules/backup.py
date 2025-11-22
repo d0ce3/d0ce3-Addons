@@ -49,6 +49,110 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     utils.logger.error(f"No se pudo encontrar la carpeta '{nombre_carpeta}'")
     return None
 
+def listar_carpetas_mega(ruta="/"):
+    """
+    Lista las carpetas disponibles en MEGA en la ruta especificada.
+    Retorna una lista de tuplas (nombre, tipo) donde tipo es 'd' para directorios.
+    """
+    try:
+        cmd = ["mega-ls", "-l", ruta]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode != 0:
+            utils.logger.error(f"Error listando carpetas en MEGA: {result.stderr}")
+            return None
+        
+        carpetas = []
+        lineas = result.stdout.strip().split('\n')
+        
+        for linea in lineas:
+            if not linea.strip():
+                continue
+            
+            # Formato de mega-ls -l: drwx------ usuario fecha nombre
+            partes = linea.split()
+            if len(partes) >= 4:
+                permisos = partes[0]
+                nombre = ' '.join(partes[3:])  # El nombre puede tener espacios
+                
+                # Solo agregar directorios (empiezan con 'd')
+                if permisos.startswith('d'):
+                    carpetas.append(nombre)
+        
+        return carpetas
+    except subprocess.TimeoutExpired:
+        utils.print_error("Tiempo de espera agotado al consultar MEGA")
+        return None
+    except Exception as e:
+        utils.logger.error(f"Error listando carpetas MEGA: {e}")
+        return None
+
+def navegar_carpetas_mega(ruta_inicial="/"):
+    """
+    Permite navegar por las carpetas de MEGA de forma interactiva.
+    Retorna la ruta seleccionada o None si se cancela.
+    """
+    ruta_actual = ruta_inicial
+    
+    while True:
+        utils.limpiar_pantalla()
+        print("\n" + "=" * 60)
+        print("NAVEGADOR DE CARPETAS MEGA")
+        print("=" * 60)
+        print(f"\n📂 Ruta actual: {ruta_actual}\n")
+        
+        carpetas = listar_carpetas_mega(ruta_actual)
+        
+        if carpetas is None:
+            utils.print_error("No se pudo obtener la lista de carpetas")
+            utils.pausar()
+            return None
+        
+        if not carpetas:
+            print("📁 (Carpeta vacía - sin subcarpetas)")
+        else:
+            print("📁 Carpetas disponibles:")
+            for i, carpeta in enumerate(carpetas, 1):
+                print(f"   {i}. {carpeta}")
+        
+        print("\n" + "-" * 60)
+        print("Opciones:")
+        print("   [número] - Entrar a carpeta")
+        print("   [0] - Subir un nivel")
+        print("   [s] - Seleccionar esta carpeta")
+        print("   [c] - Cancelar")
+        print("-" * 60)
+        
+        opcion = input("\nSeleccione una opción: ").strip().lower()
+        
+        if opcion == 'c':
+            return None
+        elif opcion == 's':
+            return ruta_actual
+        elif opcion == '0':
+            # Subir un nivel
+            if ruta_actual != "/":
+                ruta_actual = os.path.dirname(ruta_actual)
+                if not ruta_actual:
+                    ruta_actual = "/"
+        else:
+            # Intentar entrar a una carpeta
+            try:
+                indice = int(opcion)
+                if 1 <= indice <= len(carpetas):
+                    carpeta_seleccionada = carpetas[indice - 1]
+                    # Construir nueva ruta
+                    if ruta_actual == "/":
+                        ruta_actual = f"/{carpeta_seleccionada}"
+                    else:
+                        ruta_actual = f"{ruta_actual}/{carpeta_seleccionada}"
+                else:
+                    utils.print_warning("Número inválido")
+                    utils.pausar()
+            except ValueError:
+                utils.print_warning("Opción inválida")
+                utils.pausar()
+
 def ejecutar_backup_manual():
     utils.limpiar_pantalla()
     print("\n" + "=" * 60)
@@ -63,7 +167,6 @@ def ejecutar_backup_manual():
 
         # Obtener ruta y resolverla correctamente
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
-        # CORRECCIÓN: Usar encontrar_carpeta_servidor en lugar de resolver_ruta_servidor
         server_folder = encontrar_carpeta_servidor(server_folder_config)
             
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
@@ -77,7 +180,6 @@ def ejecutar_backup_manual():
         utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder) if server_folder else False}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
-        # Verificar que se encontró la carpeta
         if not server_folder or not os.path.exists(server_folder):
             utils.print_error(f"La carpeta {server_folder_config} no se pudo encontrar")
             utils.logger.error(f"Carpeta {server_folder_config} no encontrada")
@@ -172,14 +274,11 @@ def ejecutar_backup_manual():
 def ejecutar_backup_automatico():
     utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
     try:
-        # CORRECCIÓN: Verificar si está habilitado antes de continuar
         if not config.CONFIG.get("autobackup_enabled", False):
             utils.logger.info("Autobackup desactivado, no se ejecutará")
             return
 
-        # Obtener ruta y resolverla correctamente
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
-        # CORRECCIÓN: Usar encontrar_carpeta_servidor en lugar de resolver_ruta_servidor
         server_folder = encontrar_carpeta_servidor(server_folder_config)
             
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
@@ -193,12 +292,10 @@ def ejecutar_backup_automatico():
         utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder) if server_folder else False}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
-        # Verificar que se encontró la carpeta
         if not server_folder or not os.path.exists(server_folder):
             utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
             return
 
-        # logística igual a backup manual pero sin mensajes ni pausas
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(server_folder):
             for filename in filenames:
@@ -214,7 +311,6 @@ def ejecutar_backup_automatico():
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         utils.logger.info(f"Nombre de backup: {backup_name}")
 
-        # compresión
         cmd = ["zip", "-r", "-q", backup_name, server_folder]
         proceso = subprocess.run(cmd)
         if proceso.returncode != 0 or not os.path.exists(backup_name):
@@ -225,7 +321,6 @@ def ejecutar_backup_automatico():
         backup_size_mb = backup_size / (1024 * 1024)
         utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
 
-        # subida a MEGA
         cmd_upload = ["mega-put", backup_name, backup_folder]
         proceso_upload = subprocess.run(cmd_upload)
         if proceso_upload.returncode != 0:
@@ -279,13 +374,18 @@ def limpiar_backups_antiguos():
 
 def configurar_autobackup():
     """
-    Configura el autobackup de forma interactiva.
-    Se integra con config.py y utils.py existentes.
+    Configura el autobackup de forma interactiva con navegación por MEGA.
     """
     utils.limpiar_pantalla()
     print("\n" + "=" * 60)
     print("CONFIGURAR AUTOBACKUP")
     print("=" * 60 + "\n")
+    
+    # Verificar MegaCMD
+    if not utils.verificar_megacmd():
+        utils.print_error("MegaCMD no está disponible")
+        utils.pausar()
+        return
     
     # Mostrar configuración actual
     autobackup_enabled = config.CONFIG.get("autobackup_enabled", False)
@@ -350,12 +450,27 @@ def configurar_autobackup():
             server_folder = nueva_carpeta
             utils.logger.info(f"Carpeta servidor cambiada a: {nueva_carpeta}")
     
-    # Configurar destino MEGA
+    # Configurar destino MEGA con navegador
     print(f"\n☁️  Destino MEGA actual: {backup_folder}")
-    if utils.confirmar("¿Cambiar carpeta destino en MEGA?"):
+    print("\n¿Cómo desea seleccionar la carpeta destino?")
+    print("   1. Navegar por MEGA (interactivo)")
+    print("   2. Escribir ruta manualmente")
+    print("   3. Mantener actual")
+    
+    opcion_destino = input("\nSeleccione opción (1-3): ").strip()
+    
+    if opcion_destino == "1":
+        print("\n🔍 Iniciando navegador MEGA...")
+        nueva_ruta = navegar_carpetas_mega(backup_folder)
+        if nueva_ruta:
+            backup_folder = nueva_ruta
+            utils.print_msg(f"Carpeta seleccionada: {backup_folder}")
+            utils.logger.info(f"Destino MEGA cambiado a: {backup_folder}")
+        else:
+            print("Navegación cancelada, se mantiene la carpeta actual")
+    elif opcion_destino == "2":
         nuevo_destino = input("   Nueva carpeta MEGA (ej: /backups): ").strip()
         if nuevo_destino:
-            # Asegurar que empiece con /
             if not nuevo_destino.startswith("/"):
                 nuevo_destino = "/" + nuevo_destino
             backup_folder = nuevo_destino
@@ -401,7 +516,6 @@ def configurar_autobackup():
     print("=" * 60 + "\n")
     
     if utils.confirmar("¿Guardar esta configuración?"):
-        # Guardar toda la configuración
         config.set("autobackup_enabled", True)
         config.set("backup_interval_minutes", intervalo_actual)
         config.set("server_folder", server_folder)
