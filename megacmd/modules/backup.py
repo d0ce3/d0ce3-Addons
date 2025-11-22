@@ -11,12 +11,23 @@ def resolver_ruta_servidor(ruta_config):
     Resuelve la ruta del servidor de manera inteligente.
     Si es absoluta, la usa tal cual.
     Si es relativa, la resuelve desde BASE_DIR del módulo config.
+    Si la ruta configurada es el mismo directorio base, usa BASE_DIR directamente.
     """
     if os.path.isabs(ruta_config):
         return ruta_config
     
-    # Usar BASE_DIR del módulo config (ahora siempre está disponible)
-    return os.path.join(config.BASE_DIR, ruta_config)
+    # Construir ruta completa
+    full_path = os.path.join(config.BASE_DIR, ruta_config)
+    
+    # Si la ruta completa no existe, verificar si BASE_DIR mismo es el servidor
+    if not os.path.exists(full_path):
+        # Verificar si el nombre del directorio actual coincide con server_folder
+        base_name = os.path.basename(config.BASE_DIR)
+        if base_name == ruta_config:
+            # El BASE_DIR es el servidor mismo
+            return config.BASE_DIR
+    
+    return full_path
 
 def ejecutar_backup_manual():
     utils.limpiar_pantalla()
@@ -38,8 +49,10 @@ def ejecutar_backup_manual():
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
 
         utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
-        utils.logger.info(f"Configuración - Directorio actual: {os.getcwd()}")
+        utils.logger.info(f"Configuración - BASE_DIR: {config.BASE_DIR}")
+        utils.logger.info(f"Configuración - BASE_DIR basename: {os.path.basename(config.BASE_DIR)}")
         utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
+        utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder)}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
         if not os.path.exists(server_folder):
@@ -144,7 +157,7 @@ def ejecutar_backup_automatico():
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
 
         utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
-        utils.logger.info(f"Configuración - Directorio actual: {os.getcwd()}")
+        utils.logger.info(f"Configuración - BASE_DIR: {config.BASE_DIR}")
         utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
@@ -230,3 +243,4 @@ def limpiar_backups_antiguos():
         utils.logger.info(f"Limpieza completada - {len(a_eliminar)} backups eliminados")
     except Exception as e:
         utils.logger.error(f"Error en limpiar_backups_antiguos: {e}")
+        
