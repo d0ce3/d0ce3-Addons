@@ -20,8 +20,8 @@ CACHE_DIR = os.path.join(BASE_DIR, "__megacmd_cache__")
 
 PACKAGE_DIR = os.path.join(CACHE_DIR, "modules")
 
-# Flag global para controlar inicialización única del AUTOBACKUP
-autobackup_initialized = False
+# Archivo de flag para control de inicialización persistente
+AUTOBACKUP_FLAG_FILE = os.path.join(CACHE_DIR, ".autobackup_init")
 
 def ensure_requests():
     try:
@@ -115,6 +115,49 @@ class PackageManager:
             return PackageManager.download_and_extract()
         return True
 
+class AutobackupManager:
+    """Gestiona la inicialización única del autobackup usando archivo de flag"""
+    
+    @staticmethod
+    def is_initialized():
+        """Verifica si el autobackup ya fue inicializado en esta sesión"""
+        if not os.path.exists(AUTOBACKUP_FLAG_FILE):
+            return False
+        try:
+            with open(AUTOBACKUP_FLAG_FILE, 'r') as f:
+                data = json.load(f)
+                # Verificar que no haya pasado más de 1 hora (sesión caducada)
+                init_time = data.get('init_time', 0)
+                if time.time() - init_time > 3600:
+                    return False
+                return True
+        except:
+            return False
+    
+    @staticmethod
+    def mark_initialized():
+        """Marca el autobackup como inicializado"""
+        try:
+            os.makedirs(CACHE_DIR, exist_ok=True)
+            with open(AUTOBACKUP_FLAG_FILE, 'w') as f:
+                json.dump({
+                    'init_time': time.time(),
+                    'version': VERSION
+                }, f)
+            return True
+        except:
+            return False
+    
+    @staticmethod
+    def clear_flag():
+        """Elimina el flag de inicialización"""
+        try:
+            if os.path.exists(AUTOBACKUP_FLAG_FILE):
+                os.remove(AUTOBACKUP_FLAG_FILE)
+            return True
+        except:
+            return False
+
 class ModuleLoader:
     _cache = {}
 
@@ -149,7 +192,6 @@ class ModuleLoader:
 
     @staticmethod
     def reload_all():
-        global autobackup_initialized
         print("\n" + "="*60)
         print("🔄 ACTUALIZANDO DESDE GITHUB PAGES")
         print("="*60 + "\n")
@@ -171,8 +213,8 @@ class ModuleLoader:
         print()
         print("📥 Descargando paquete actualizado...")
         if PackageManager.download_and_extract():
-            # Resetear el flag de autobackup cuando se actualizan los módulos
-            autobackup_initialized = False
+            # Limpiar el flag de autobackup cuando se actualizan módulos
+            AutobackupManager.clear_flag()
             print("="*60)
             print("✅ ACTUALIZACIÓN COMPLETADA")
             print("="*60)
@@ -260,12 +302,12 @@ def actualizar_modulos():
             print("\n❌ Hubo un error durante la actualización")
             print("💡 Verificá tu conexión a internet")
     else:
-        print("\nâŒ Actualización cancelada")
+        print("\n❌ Actualización cancelada")
         print("\n" + "="*60 + "\n")
     input("Presioná Enter para continuar...")
 
 def init():
-    global autobackup_initialized
+    """Inicialización del sistema con control de autobackup único"""
     
     # Cargar configuración
     ConfigManager.load()
@@ -281,15 +323,21 @@ def init():
         return
     
     utils = ModuleLoader.load_module("utils")
-    autobackup = ModuleLoader.load_module("autobackup")
     
-    # Control para que init_on_load se ejecute una sola vez
-    if autobackup and hasattr(autobackup, 'init_on_load') and not autobackup_initialized:
+    # Verificar si el autobackup ya fue inicializado
+    if AutobackupManager.is_initialized():
+        if utils and hasattr(utils, 'logger'):
+            utils.logger.info("Autobackup ya inicializado previamente - omitiendo")
+        return
+    
+    # Cargar e inicializar autobackup solo si no fue inicializado antes
+    autobackup = ModuleLoader.load_module("autobackup")
+    if autobackup and hasattr(autobackup, 'init_on_load'):
         try:
             autobackup.init_on_load()
-            autobackup_initialized = True
+            AutobackupManager.mark_initialized()
             if utils and hasattr(utils, 'logger'):
-                utils.logger.info("Autobackup iniciado correctamente")
+                utils.logger.info("Autobackup iniciado correctamente (primera vez)")
         except Exception as e:
             if utils and hasattr(utils, 'logger'):
                 utils.logger.error(f"Error inicializando autobackup: {e}")
