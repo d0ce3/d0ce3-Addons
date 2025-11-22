@@ -11,44 +11,46 @@ backup = CloudModuleLoader.load_module("backup")
 if not utils:
     import logging
     logger = logging.getLogger('megacmd')
-    
+
     class TempUtils:
         logger = logger
-        
+
         @staticmethod
         def print_msg(msg, icono="✓"):
             print(f"{icono} ⎹ {msg}")
-        
+
         @staticmethod
         def print_error(msg):
             print(f"✖ ⎹ {msg}")
-        
+
         @staticmethod
         def print_warning(msg):
             print(f"⚠ ⎹ {msg}")
-        
+
         @staticmethod
         def Spinner(msg):
             class DummySpinner:
                 def __init__(self, mensaje):
                     self.mensaje = mensaje
+
                 def start(self, proceso, check_file=None):
                     proceso.wait()
                     return True
+
             return DummySpinner(msg)
-        
+
         @staticmethod
         def limpiar_pantalla():
             os.system('clear')
-        
+
         @staticmethod
         def pausar():
             input("\n[+] Enter para continuar...")
-        
+
         @staticmethod
         def confirmar(msg):
             return input(f"{msg} (s/n): ").strip().lower() == 's'
-        
+
         @staticmethod
         def formato_bytes(b):
             for u in ['B', 'KB', 'MB', 'GB']:
@@ -56,39 +58,67 @@ if not utils:
                     return f"{b:.1f} {u}"
                 b /= 1024
             return f"{b:.1f} TB"
-    
-    utils = TempUtils()
 
-# ============================================
-# LISTAR Y DESCARGAR
-# ============================================
+    utils = TempUtils()
 
 def listar_y_descargar():
     utils.limpiar_pantalla()
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("LISTAR Y DESCARGAR DE MEGA")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
     utils.logger.info("Listando archivos en MEGA")
+
     try:
-        # Verificar MegaCMD
         if not utils.verificar_megacmd():
             utils.print_error("MegaCMD no está disponible")
             utils.pausar()
             return
-        
-        backup_folder = config.CONFIG.get("backup_folder", "/backups")
-        print(f"📁 Listando archivos en: {backup_folder}\n")
-        cmd = ["mega-ls", "-l", backup_folder]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            utils.print_error("No se pudo listar archivos")
-            utils.logger.error(f"Error listando MEGA: {result.stderr}")
+
+        # Lista carpetas en la raíz de MEGA
+        print("📁 Listar carpetas en MEGA raíz:\n")
+        cmd_ls_root = ["mega-ls", "/"]
+        result_root = subprocess.run(cmd_ls_root, capture_output=True, text=True)
+        if result_root.returncode != 0:
+            utils.print_error("No se pudo listar la raíz en MEGA")
             utils.pausar()
             return
-        
-        lineas = result.stdout.strip().split('\n')
+
+        carpetas = []
+        for line in result_root.stdout.strip().split('\n'):
+            if line.endswith('/'):
+                carpetas.append(line.strip('/').strip())
+
+        if not carpetas:
+            carpetas = [config.CONFIG.get("backup_folder", "/backups")]
+
+        print("Carpetas disponibles:")
+        for idx, carpeta in enumerate(carpetas, 1):
+            print(f"{idx}. {carpeta}")
+
+        opcion = input("\nElegí carpeta para listar archivos (0 para raiz): ").strip()
+        if opcion == '0':
+            ruta = "/"
+        else:
+            try:
+                idx_sel = int(opcion) - 1
+                if 0 <= idx_sel < len(carpetas):
+                    ruta = "/" + carpetas[idx_sel]
+                else:
+                    ruta = "/"
+            except:
+                ruta = "/"
+
+        print(f"\nListando archivos en: {ruta}\n")
+
+        cmd_ls = ["mega-ls", "-l", ruta]
+        result = subprocess.run(cmd_ls, capture_output=True, text=True)
+        if result.returncode != 0:
+            utils.print_error("No se pudo listar archivos")
+            utils.pausar()
+            return
+
         archivos = []
-        for linea in lineas:
+        for linea in result.stdout.strip().split('\n'):
             if '.zip' in linea:
                 partes = linea.split()
                 if len(partes) >= 2:
@@ -98,86 +128,98 @@ def listar_y_descargar():
                         archivos.append({'nombre': nombre, 'size_str': size_str})
                     except:
                         archivos.append({'nombre': nombre, 'size_str': 'N/A'})
+
         if not archivos:
             utils.print_warning("No hay archivos ZIP en MEGA")
             utils.pausar()
             return
+
         print("Archivos disponibles:\n")
         for idx, archivo in enumerate(archivos, 1):
             print(f"{idx}. {archivo['nombre']} ({archivo['size_str']})")
-        print(f"\n{len(archivos)} archivos encontrados\n")
-        try:
-            seleccion = input("Número de archivo a descargar (0 para cancelar): ").strip()
-            if seleccion == '0':
-                print("Cancelado")
-                utils.pausar()
-                return
-            idx = int(seleccion) - 1
-            if idx < 0 or idx >= len(archivos):
-                utils.print_error("Número inválido")
-                utils.pausar()
-                return
-            archivo_seleccionado = archivos[idx]['nombre']
-            print(f"\n📥 Descargando: {archivo_seleccionado}")
-            cmd_get = ["mega-get", f"{backup_folder}/{archivo_seleccionado}", "."]
-            proceso = subprocess.Popen(cmd_get, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            spinner = utils.Spinner("Descargando")
-            if not spinner.start(proceso):
-                utils.print_error("Error al descargar")
-                utils.logger.error(f"Error descargando {archivo_seleccionado}")
-                utils.pausar()
-                return
-            utils.print_msg(f"Descargado: {archivo_seleccionado}")
-            utils.logger.info(f"Archivo descargado: {archivo_seleccionado}")
-            print()
-            if utils.confirmar("¿Descomprimir ahora?"):
-                descomprimir_backup(archivo_seleccionado)
-        except ValueError:
-            utils.print_error("Entrada inválida")
+
+        seleccion = input("\nNúmero de archivo a descargar (0 para cancelar): ").strip()
+        if seleccion == '0':
+            print("Cancelado")
+            utils.pausar()
+            return
+
+        idx = int(seleccion) - 1
+        if idx < 0 or idx >= len(archivos):
+            utils.print_error("Número inválido")
+            utils.pausar()
+            return
+
+        archivo_seleccionado = archivos[idx]['nombre']
+        print(f"\n📥 Descargando: {archivo_seleccionado}")
+
+        full_ruta = f"{ruta}/{archivo_seleccionado}".replace('//', '/')
+        cmd_get = ["mega-get", full_ruta, "."]
+        proceso = subprocess.Popen(cmd_get, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        spinner = utils.Spinner("Descargando")
+        if not spinner.start(proceso):
+            utils.print_error("Error al descargar")
+            utils.logger.error(f"Error descargando {archivo_seleccionado}")
+            utils.pausar()
+            return
+
+        utils.print_msg(f"Descargado: {archivo_seleccionado}")
+        utils.logger.info(f"Archivo descargado: {archivo_seleccionado}")
+
+        if utils.confirmar("¿Descomprimir ahora?"):
+            descomprimir_backup(archivo_seleccionado)
+
     except Exception as e:
         utils.print_error(f"Error: {e}")
         utils.logger.error(f"Error en listar_y_descargar: {e}")
-    utils.pausar()
 
-# ============================================
-# GESTIONAR BACKUPS
-# ============================================
+    utils.pausar()
 
 def gestionar_backups():
     utils.limpiar_pantalla()
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("GESTIONAR BACKUPS EN MEGA")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
     utils.logger.info("Gestionando backups")
     try:
         if not utils.verificar_megacmd():
             utils.print_error("MegaCMD no está disponible")
             utils.pausar()
             return
+
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
+
         print(f"📁 Listando backups en: {backup_folder}\n")
+
         cmd = ["mega-ls", backup_folder]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             utils.print_error("No se pudo listar backups")
             utils.pausar()
             return
+
         archivos = [line.strip() for line in result.stdout.split('\n') if backup_prefix in line and '.zip' in line]
         archivos.sort(reverse=True)
+
         if not archivos:
             utils.print_warning("No hay backups en MEGA")
             utils.pausar()
             return
+
         print(f"Backups encontrados: {len(archivos)}\n")
         for idx, archivo in enumerate(archivos, 1):
             print(f"{idx}. {archivo}")
+
         print(f"\nOpciones:")
         print("1. Eliminar backup específico")
         print("2. Limpiar backups antiguos")
         print("3. Ver información de cuenta")
         print("4. Volver\n")
+
         opcion = input("Seleccioná una opción: ").strip()
+
         if opcion == "1":
             try:
                 num = int(input("\nNúmero de backup a eliminar (0 para cancelar): ").strip())
@@ -189,6 +231,7 @@ def gestionar_backups():
                     utils.print_error("Número inválido")
                     utils.pausar()
                     return
+
                 archivo_eliminar = archivos[num - 1]
                 if utils.confirmar(f"¿Eliminar {archivo_eliminar}?"):
                     cmd_rm = ["mega-rm", f"{backup_folder}/{archivo_eliminar}"]
@@ -203,28 +246,28 @@ def gestionar_backups():
                     print("Cancelado")
             except ValueError:
                 utils.print_error("Entrada inválida")
+
         elif opcion == "2":
             if backup:
                 backup.limpiar_backups_antiguos()
             else:
                 utils.print_error("Módulo backup no disponible")
+
         elif opcion == "3":
             info_cuenta()
             return
+
     except Exception as e:
         utils.print_error(f"Error: {e}")
         utils.logger.error(f"Error en gestionar_backups: {e}")
-    utils.pausar()
 
-# ============================================
-# SUBIR ARCHIVO
-# ============================================
+    utils.pausar()
 
 def subir_archivo():
     utils.limpiar_pantalla()
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SUBIR ARCHIVO A MEGA")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
     utils.logger.info("Subiendo archivo a MEGA")
     try:
         if not utils.verificar_megacmd():
@@ -270,15 +313,11 @@ def subir_archivo():
         utils.logger.error(f"Error en subir_archivo: {e}")
     utils.pausar()
 
-# ============================================
-# INFORMACIÓN DE CUENTA
-# ============================================
-
 def info_cuenta():
     utils.limpiar_pantalla()
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("INFORMACIÓN DE CUENTA MEGA")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
     try:
         if not utils.verificar_megacmd():
             utils.print_error("MegaCMD no está disponible")
@@ -305,10 +344,6 @@ def info_cuenta():
         utils.print_error(f"Error: {e}")
         utils.logger.error(f"Error en info_cuenta: {e}")
     utils.pausar()
-
-# ============================================
-# FUNCIONES AUXILIARES
-# ============================================
 
 def descomprimir_backup(archivo):
     try:
