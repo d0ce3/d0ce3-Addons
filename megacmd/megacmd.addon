@@ -14,7 +14,7 @@ exec echo "✓ Addon actualizado, gracias por utilizar mi addon c: by:d0ce3"
 
 :button crear_backup
 text Crear Backup en MEGA
-c_exec crear_backup_mega()
+c_exec ejecutar_backup_manual()
 
 :button listar_descargar
 text Listar y Descargar de MEGA
