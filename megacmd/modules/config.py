@@ -1,6 +1,15 @@
 import os
 import json
 
+# Directorio base - donde se encuentra el script principal
+# Esto se usa como referencia para rutas relativas
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Si estamos en __megacmd_cache__/modules, subir hasta el directorio raíz del proyecto
+if BASE_DIR.endswith(os.path.join("__megacmd_cache__", "modules")):
+    # Subir dos niveles: modules -> __megacmd_cache__ -> directorio raíz
+    BASE_DIR = os.path.dirname(os.path.dirname(BASE_DIR))
+
 # Configuración por defecto
 DEFAULT_CONFIG = {
     "backup_folder": "/backups",
@@ -11,7 +20,7 @@ DEFAULT_CONFIG = {
 }
 
 # Archivo de configuración
-CONFIG_FILE = "megacmd_config.json"
+CONFIG_FILE = os.path.join(BASE_DIR, "megacmd_config.json")
 
 # ============================================
 # FUNCIONES

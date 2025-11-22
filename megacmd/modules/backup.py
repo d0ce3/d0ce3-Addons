@@ -5,6 +5,19 @@ from datetime import datetime
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
 
+# Función auxiliar para resolver rutas correctamente
+def resolver_ruta_servidor(ruta_config):
+    """
+    Resuelve la ruta del servidor de manera inteligente.
+    Si es absoluta, la usa tal cual.
+    Si es relativa, la resuelve desde BASE_DIR del módulo config.
+    """
+    if os.path.isabs(ruta_config):
+        return ruta_config
+    
+    # Usar BASE_DIR del módulo config (ahora siempre está disponible)
+    return os.path.join(config.BASE_DIR, ruta_config)
+
 def ejecutar_backup_manual():
     utils.limpiar_pantalla()
     print("\n" + "=" * 60)
@@ -17,14 +30,16 @@ def ejecutar_backup_manual():
             utils.pausar()
             return
 
-        # Convertir ruta relativa a absoluta
+        # Obtener ruta y resolverla correctamente
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
-        server_folder = os.path.abspath(server_folder_config)
+        server_folder = resolver_ruta_servidor(server_folder_config)
+            
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
 
         utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
-        utils.logger.info(f"Configuración - Carpeta absoluta: {server_folder}")
+        utils.logger.info(f"Configuración - Directorio actual: {os.getcwd()}")
+        utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
         if not os.path.exists(server_folder):
@@ -121,14 +136,16 @@ def ejecutar_backup_manual():
 def ejecutar_backup_automatico():
     utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
     try:
-        # Convertir ruta relativa a absoluta
+        # Obtener ruta y resolverla correctamente
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
-        server_folder = os.path.abspath(server_folder_config)
+        server_folder = resolver_ruta_servidor(server_folder_config)
+            
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
 
         utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
-        utils.logger.info(f"Configuración - Carpeta absoluta: {server_folder}")
+        utils.logger.info(f"Configuración - Directorio actual: {os.getcwd()}")
+        utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
         if not os.path.exists(server_folder):
