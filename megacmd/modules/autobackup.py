@@ -11,7 +11,6 @@ utils = CloudModuleLoader.load_module("utils")
 backup_timer = None
 backup_timer_created_at = None
 
-AUTOBACKUP_FILE = os.path.expanduser("~/.megacmd_autobackup")
 TIMER_LOCK_FILE = os.path.expanduser("~/.megacmd_timer_lock")
 
 class TimerManager:
@@ -100,19 +99,18 @@ class TimerManager:
             pass
         return False
 
+# CAMBIO IMPORTANTE: Ahora usa config.py en lugar de archivo separado
 def is_enabled():
+    """Verifica si el autobackup está habilitado desde config.py"""
     try:
-        if os.path.exists(AUTOBACKUP_FILE):
-            with open(AUTOBACKUP_FILE, 'r') as f:
-                return f.read().strip() == 'enabled'
-        return False
+        return config.CONFIG.get("autobackup_enabled", False)
     except:
         return False
 
 def enable():
+    """Habilita el autobackup en config.py"""
     try:
-        with open(AUTOBACKUP_FILE, 'w') as f:
-            f.write('enabled')
+        config.set("autobackup_enabled", True)
         utils.logger.info("Autobackup habilitado")
         return True
     except Exception as e:
@@ -120,9 +118,9 @@ def enable():
         return False
 
 def disable():
+    """Deshabilita el autobackup en config.py"""
     try:
-        if os.path.exists(AUTOBACKUP_FILE):
-            os.remove(AUTOBACKUP_FILE)
+        config.set("autobackup_enabled", False)
         utils.logger.info("Autobackup deshabilitado")
         return True
     except Exception as e:
