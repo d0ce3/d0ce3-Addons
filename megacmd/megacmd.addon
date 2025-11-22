@@ -30,7 +30,7 @@ c_exec subir_archivo_mega()
 
 :button autobackup
 text Configurar Autobackup
-c_exec configurar_autobackup()
+c_exec toggle_autobackup()
 
 :button info_cuenta
 text Información de Cuenta MEGA

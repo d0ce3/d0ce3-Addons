@@ -289,14 +289,14 @@ def subir_archivo_mega():
         input("\n[+] Enter para continuar...")
 
 def toggle_autobackup():
-    autobackup = ModuleLoader.load_module("autobackup")
-    if autobackup and hasattr(autobackup, 'toggle_autobackup'):
-        autobackup.toggle_autobackup()
+    backup = ModuleLoader.load_module("backup")
+    if backup and hasattr(backup, 'configurar_autobackup'):
+        backup.configurar_autobackup()
     else:
-        print("❌ Error: función toggle_autobackup no disponible")
+        print("❌ Error: función configurar_autobackup no disponible")
         print("💡 Intentá actualizar los módulos")
         input("\n[+] Enter para continuar...")
-
+        
 def info_cuenta_mega():
     files = ModuleLoader.load_module("files")
     if files and hasattr(files, 'info_cuenta'):
