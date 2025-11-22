@@ -150,9 +150,6 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     
     return None
 
-# ============================================================================
-# MEJORA 1: Función ejecutar_backup_automatico() mejorada de ejecutar_backup_auto_simple.py
-# ============================================================================
 def ejecutar_backup_automatico():
     """Ejecuta el backup automático con logging detallado"""
     global backup_timer
@@ -166,6 +163,8 @@ def ejecutar_backup_automatico():
         if not config.CONFIG.get("autobackup_enabled", False):
             utils.logger.info("Autobackup desactivado, no se ejecutará")
             return
+        
+        utils.print_msg("INICIANDO BACKUP AUTOMÁTICO")
         
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
         server_folder = encontrar_carpeta_servidor(server_folder_config)
@@ -181,65 +180,84 @@ def ejecutar_backup_automatico():
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
         
         if not server_folder or not os.path.exists(server_folder):
+            utils.print_error(f"La carpeta {server_folder_config} no existe, se cancela backup automático")
             utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
             return
         
-        # Calcular tamaño
+        utils.print_msg("Calculando tamaño de carpeta...")
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(server_folder):
             for filename in filenames:
                 filepath = os.path.join(dirpath, filename)
                 try:
                     total_size += os.path.getsize(filepath)
-                except:
+                except Exception:
                     pass
         
         size_mb = total_size / (1024 * 1024)
+        utils.print_msg(f"Tamaño total: {size_mb:.1f} MB")
         utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
         
-        # Crear nombre del backup
         timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
+        utils.print_msg(f"Archivo a crear: {backup_name}")
         utils.logger.info(f"Nombre de backup: {backup_name}")
         
-        # Comprimir
+        utils.print_msg("Comprimiendo...")
         utils.logger.info("Iniciando compresión...")
-        cmd = ["zip", "-r", "-q", backup_name, server_folder]
-        proceso = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        if proceso.returncode != 0 or not os.path.exists(backup_name):
+        cmd = ["zip", "-r", "-q", backup_name, server_folder]
+        proceso = subprocess.Popen(cmd)
+        proceso.wait()
+        
+        if not os.path.exists(backup_name):
+            utils.print_error("Error al crear archivo ZIP")
             utils.logger.error("Error durante compresión automática")
             return
         
-        backup_size = os.path.getsize(backup_name)
-        backup_size_mb = backup_size / (1024 * 1024)
+        backup_size_mb = os.path.getsize(backup_name) / (1024 * 1024)
+        utils.print_msg(f"Archivo comprimido: {backup_name} ({backup_size_mb:.1f} MB)")
         utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
         
-        # Subir a MEGA
+        utils.print_msg("Subiendo a MEGA...")
         utils.logger.info("Iniciando subida a MEGA...")
-        cmd_upload = ["mega-put", "-q", backup_name, backup_folder]
-        proceso_upload = subprocess.run(cmd_upload, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        cmd_upload = ["mega-put", backup_name, backup_folder]
+        proceso_upload = subprocess.Popen(cmd_upload)
+        proceso_upload.wait()
         
         if proceso_upload.returncode != 0:
+            utils.print_error("Error al subir backup a MEGA")
             utils.logger.error("Error al subir backup automático a MEGA")
             try:
                 os.remove(backup_name)
-            except:
+            except Exception:
                 pass
             return
         
+        utils.print_msg(f"Backup subido a MEGA en {backup_folder}/{backup_name}")
         utils.logger.info(f"Backup automático subido exitosamente: {backup_folder}/{backup_name}")
         
-        # Eliminar archivo local
         try:
             os.remove(backup_name)
+            utils.print_msg("Archivo temporal eliminado")
             utils.logger.info("Archivo local eliminado")
         except Exception as e:
+            utils.print_warning(f"No se pudo eliminar archivo temporal: {e}")
             utils.logger.warning(f"No se pudo eliminar archivo local: {e}")
         
+        # Limpiar backups viejos según configuración
+        backup = CloudModuleLoader.load_module("backup")
+        if backup and hasattr(backup, 'limpiar_backups_antiguos'):
+            backup.limpiar_backups_antiguos()
+        else:
+            utils.logger.warning("No se pudo importar limpiar_backups_antiguos desde backup.py")
+        
+        utils.print_msg("Backup automático completado")
         utils.logger.info("========== FIN BACKUP AUTOMÁTICO ==========")
         
     except Exception as e:
+        utils.print_error(f"Error en backup automático: {e}")
         utils.logger.error(f"Error en backup automático: {str(e)}")
         import traceback
         utils.logger.error(traceback.format_exc())
@@ -312,9 +330,6 @@ def toggle_autobackup():
         start_autobackup()
         utils.logger.info("Autobackup activado por usuario")
 
-# ============================================================================
-# MEJORA 2: Función configurar_autobackup() de configurar_autobackup_mejorado.py
-# ============================================================================
 def configurar_autobackup():
     """
     Menú interactivo para configurar el autobackup
