@@ -1,28 +1,27 @@
 import threading
-import time
 import os
+import subprocess
+from datetime import datetime
 
-# Cargar dependencias
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
 backup = CloudModuleLoader.load_module("backup")
 
-# Verificar que utils cargó correctamente
 if not utils:
     import logging
     logger = logging.getLogger('megacmd')
-    
+
     class TempUtils:
         logger = logger
-        
+
         @staticmethod
         def print_msg(msg, icono="✓"):
             print(f"{icono} ⎹ {msg}")
-        
+
         @staticmethod
         def print_error(msg):
             print(f"✖ ⎹ {msg}")
-        
+
         @staticmethod
         def Spinner(msg):
             class DummySpinner:
@@ -32,19 +31,18 @@ if not utils:
                     proceso.wait()
                     return True
             return DummySpinner(msg)
-        
+
         @staticmethod
         def limpiar_pantalla():
             os.system('clear')
-        
+
         @staticmethod
         def pausar():
             input("\n[+] Enter para continuar...")
-        
+
         @staticmethod
         def confirmar(msg):
             return input(f"{msg} (s/n): ").strip().lower() == 's'
-    
     utils = TempUtils()
 
 backup_timer = None
@@ -225,11 +223,8 @@ def start_autobackup():
     global backup_timer
 
     if backup_timer:
-        try:
-            backup_timer.cancel()
-            utils.logger.info("Timer anterior cancelado")
-        except:
-            pass
+        backup_timer.cancel()
+        backup_timer = None
 
     if is_enabled():
         interval_seconds = config.CONFIG["backup_interval_minutes"] * 60
@@ -319,6 +314,7 @@ def toggle_autobackup():
     utils.pausar()
 
 def init_on_load():
-    if is_enabled():
+    global backup_timer
+    if is_enabled() and backup_timer is None:
         start_autobackup()
         utils.logger.info(f"Autobackup activado - cada {config.CONFIG['backup_interval_minutes']} minutos")
