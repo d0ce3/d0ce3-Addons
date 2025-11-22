@@ -5,29 +5,49 @@ from datetime import datetime
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
 
-# Función auxiliar para resolver rutas correctamente
-def resolver_ruta_servidor(ruta_config):
+def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     """
-    Resuelve la ruta del servidor de manera inteligente.
-    Si es absoluta, la usa tal cual.
-    Si es relativa, la resuelve desde BASE_DIR del módulo config.
-    Si la ruta configurada es el mismo directorio base, usa BASE_DIR directamente.
+    Encuentra la carpeta del servidor de forma inteligente.
+    Busca en múltiples ubicaciones comunes.
     """
-    if os.path.isabs(ruta_config):
-        return ruta_config
+    # Lista de ubicaciones a verificar
+    ubicaciones_a_verificar = [
+        # 1. Ruta absoluta directa en /workspaces
+        f"/workspaces/{os.environ.get('CODESPACE_NAME', 'unknown')}/{nombre_carpeta}",
+        
+        # 2. Buscar en /workspaces/*/servidor_minecraft
+        None,  # Se busca dinámicamente
+        
+        # 3. Relativo desde getcwd()
+        os.path.join(os.getcwd(), nombre_carpeta),
+        
+        # 4. Subir un nivel desde getcwd()
+        os.path.join(os.path.dirname(os.getcwd()), nombre_carpeta),
+        
+        # 5. En el home del usuario
+        os.path.expanduser(f"~/{nombre_carpeta}"),
+    ]
     
-    # Construir ruta completa
-    full_path = os.path.join(config.BASE_DIR, ruta_config)
+    # Verificar ubicaciones directas
+    for ubicacion in ubicaciones_a_verificar:
+        if ubicacion and os.path.exists(ubicacion) and os.path.isdir(ubicacion):
+            utils.logger.info(f"Carpeta del servidor encontrada en: {ubicacion}")
+            return ubicacion
     
-    # Si la ruta completa no existe, verificar si BASE_DIR mismo es el servidor
-    if not os.path.exists(full_path):
-        # Verificar si el nombre del directorio actual coincide con server_folder
-        base_name = os.path.basename(config.BASE_DIR)
-        if base_name == ruta_config:
-            # El BASE_DIR es el servidor mismo
-            return config.BASE_DIR
+    # Búsqueda dinámica en /workspaces
+    try:
+        if os.path.exists("/workspaces"):
+            for item in os.listdir("/workspaces"):
+                ruta_posible = os.path.join("/workspaces", item, nombre_carpeta)
+                if os.path.exists(ruta_posible) and os.path.isdir(ruta_posible):
+                    utils.logger.info(f"Carpeta del servidor encontrada en: {ruta_posible}")
+                    return ruta_posible
+    except:
+        pass
     
-    return full_path
+    # Si no se encuentra, retornar None
+    utils.logger.error(f"No se pudo encontrar la carpeta '{nombre_carpeta}'")
+    return None
 
 def ejecutar_backup_manual():
     utils.limpiar_pantalla()
@@ -50,7 +70,8 @@ def ejecutar_backup_manual():
 
         utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
         utils.logger.info(f"Configuración - BASE_DIR: {config.BASE_DIR}")
-        utils.logger.info(f"Configuración - BASE_DIR basename: {os.path.basename(config.BASE_DIR)}")
+        utils.logger.info(f"Configuración - os.getcwd(): {os.getcwd()}")
+        utils.logger.info(f"Configuración - parent de BASE_DIR: {os.path.dirname(config.BASE_DIR)}")
         utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
         utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder)}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
@@ -158,7 +179,10 @@ def ejecutar_backup_automatico():
 
         utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
         utils.logger.info(f"Configuración - BASE_DIR: {config.BASE_DIR}")
+        utils.logger.info(f"Configuración - os.getcwd(): {os.getcwd()}")
+        utils.logger.info(f"Configuración - parent de BASE_DIR: {os.path.dirname(config.BASE_DIR)}")
         utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
+        utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder)}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
 
         if not os.path.exists(server_folder):
@@ -243,4 +267,3 @@ def limpiar_backups_antiguos():
         utils.logger.info(f"Limpieza completada - {len(a_eliminar)} backups eliminados")
     except Exception as e:
         utils.logger.error(f"Error en limpiar_backups_antiguos: {e}")
-        
