@@ -52,32 +52,24 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
 def listar_carpetas_mega(ruta="/"):
     """
     Lista las carpetas disponibles en MEGA en la ruta especificada.
-    Retorna una lista de tuplas (nombre, tipo) donde tipo es 'd' para directorios.
+    Retorna una lista de nombres de carpetas.
     """
     try:
-        cmd = ["mega-ls", "-l", ruta]
+        cmd = ["mega-ls", ruta]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
         if result.returncode != 0:
             utils.logger.error(f"Error listando carpetas en MEGA: {result.stderr}")
             return None
         
+        # Obtener solo nombres de carpetas (sin detalles)
         carpetas = []
         lineas = result.stdout.strip().split('\n')
         
         for linea in lineas:
-            if not linea.strip():
-                continue
-            
-            # Formato de mega-ls -l: drwx------ usuario fecha nombre
-            partes = linea.split()
-            if len(partes) >= 4:
-                permisos = partes[0]
-                nombre = ' '.join(partes[3:])  # El nombre puede tener espacios
-                
-                # Solo agregar directorios (empiezan con 'd')
-                if permisos.startswith('d'):
-                    carpetas.append(nombre)
+            nombre = linea.strip()
+            if nombre and nombre != '..' and nombre != '.':
+                carpetas.append(nombre)
         
         return carpetas
     except subprocess.TimeoutExpired:
@@ -89,7 +81,7 @@ def listar_carpetas_mega(ruta="/"):
 
 def navegar_carpetas_mega(ruta_inicial="/"):
     """
-    Permite navegar por las carpetas de MEGA de forma interactiva.
+    Permite navegar por las carpetas de MEGA de forma interactiva y simplificada.
     Retorna la ruta seleccionada o None si se cancela.
     """
     ruta_actual = ruta_inicial
@@ -97,9 +89,9 @@ def navegar_carpetas_mega(ruta_inicial="/"):
     while True:
         utils.limpiar_pantalla()
         print("\n" + "=" * 60)
-        print("NAVEGADOR DE CARPETAS MEGA")
+        print("SELECCIONAR CARPETA EN MEGA")
         print("=" * 60)
-        print(f"\n📂 Ruta actual: {ruta_actual}\n")
+        print(f"📂 {ruta_actual}\n")
         
         carpetas = listar_carpetas_mega(ruta_actual)
         
@@ -109,21 +101,16 @@ def navegar_carpetas_mega(ruta_inicial="/"):
             return None
         
         if not carpetas:
-            print("📁 (Carpeta vacía - sin subcarpetas)")
+            print("(Carpeta vacía)\n")
         else:
-            print("📁 Carpetas disponibles:")
             for i, carpeta in enumerate(carpetas, 1):
-                print(f"   {i}. {carpeta}")
+                print(f"   {i}. 📁 {carpeta}")
         
         print("\n" + "-" * 60)
-        print("Opciones:")
-        print("   [número] - Entrar a carpeta")
-        print("   [0] - Subir un nivel")
-        print("   [s] - Seleccionar esta carpeta")
-        print("   [c] - Cancelar")
+        print("[número] Entrar  |  [0] Subir  |  [s] Seleccionar  |  [c] Cancelar")
         print("-" * 60)
         
-        opcion = input("\nSeleccione una opción: ").strip().lower()
+        opcion = input("\n> ").strip().lower()
         
         if opcion == 'c':
             return None
@@ -374,7 +361,7 @@ def limpiar_backups_antiguos():
 
 def configurar_autobackup():
     """
-    Configura el autobackup de forma interactiva con navegación por MEGA.
+    Configura el autobackup de forma interactiva y simplificada.
     """
     utils.limpiar_pantalla()
     print("\n" + "=" * 60)
@@ -442,25 +429,19 @@ def configurar_autobackup():
                 utils.pausar()
                 return
     
-    # Configurar carpeta servidor
-    print(f"\n📁 Carpeta servidor actual: {server_folder}")
-    if utils.confirmar("¿Cambiar carpeta del servidor?"):
-        nueva_carpeta = input("   Nueva carpeta: ").strip()
-        if nueva_carpeta:
-            server_folder = nueva_carpeta
-            utils.logger.info(f"Carpeta servidor cambiada a: {nueva_carpeta}")
+    # OMITIDA: Configuración de carpeta servidor (siempre será servidor_minecraft)
     
-    # Configurar destino MEGA con navegador
+    # Configurar destino MEGA con navegador simplificado
     print(f"\n☁️  Destino MEGA actual: {backup_folder}")
     print("\n¿Cómo desea seleccionar la carpeta destino?")
-    print("   1. Navegar por MEGA (interactivo)")
+    print("   1. Navegar por MEGA")
     print("   2. Escribir ruta manualmente")
     print("   3. Mantener actual")
     
     opcion_destino = input("\nSeleccione opción (1-3): ").strip()
     
     if opcion_destino == "1":
-        print("\n🔍 Iniciando navegador MEGA...")
+        print("\n🔍 Cargando carpetas MEGA...")
         nueva_ruta = navegar_carpetas_mega(backup_folder)
         if nueva_ruta:
             backup_folder = nueva_ruta
