@@ -13,15 +13,12 @@ backup_timer = None
 backup_timer_created_at = None
 TIMER_LOCK_FILE = os.path.expanduser("~/.megacmd_timer_lock")
 
-# Zona horaria de Argentina (UTC-3)
 TIMEZONE_ARG = timezone(timedelta(hours=-3))
 
 class TimerManager:
-    """Gestiona el estado del timer de manera persistente"""
     
     @staticmethod
     def is_timer_active():
-        """Verifica si hay un timer activo (incluso de otra instancia del módulo)"""
         if not os.path.exists(TIMER_LOCK_FILE):
             return False
         
@@ -29,30 +26,24 @@ class TimerManager:
             with open(TIMER_LOCK_FILE, 'r') as f:
                 data = json.load(f)
             
-            # Verificar que no haya pasado más del doble del intervalo
             last_activity = data.get('last_activity', 0)
             interval = data.get('interval_minutes', 3)
             elapsed = time.time() - last_activity
             
-            # Si pasó más del doble del intervalo, el timer probablemente murió
             if elapsed > (interval * 60 * 2):
                 return False
             
-            # Verificar el PID del proceso
             pid = data.get('pid', 0)
             try:
-                # Verificar si el proceso existe
                 os.kill(pid, 0)
                 return True
             except (OSError, ProcessLookupError):
-                # El proceso no existe
                 return False
         except:
             return False
     
     @staticmethod
     def mark_timer_active(interval_minutes=3):
-        """Marca que hay un timer activo"""
         try:
             with open(TIMER_LOCK_FILE, 'w') as f:
                 json.dump({
@@ -67,7 +58,6 @@ class TimerManager:
     
     @staticmethod
     def update_activity():
-        """Actualiza el timestamp de última actividad"""
         if not os.path.exists(TIMER_LOCK_FILE):
             return False
         
@@ -75,7 +65,6 @@ class TimerManager:
             with open(TIMER_LOCK_FILE, 'r') as f:
                 data = json.load(f)
             
-            # Solo actualizar si el PID coincide
             if data.get('pid') == os.getpid():
                 data['last_activity'] = time.time()
                 with open(TIMER_LOCK_FILE, 'w') as f:
@@ -87,10 +76,8 @@ class TimerManager:
     
     @staticmethod
     def clear_timer():
-        """Limpia el archivo de lock del timer"""
         try:
             if os.path.exists(TIMER_LOCK_FILE):
-                # Solo limpiar si el PID coincide o el archivo está corrupto
                 try:
                     with open(TIMER_LOCK_FILE, 'r') as f:
                         data = json.load(f)
@@ -98,7 +85,6 @@ class TimerManager:
                         os.remove(TIMER_LOCK_FILE)
                         return True
                 except:
-                    # Archivo corrupto, eliminarlo
                     os.remove(TIMER_LOCK_FILE)
                     return True
         except:
@@ -106,14 +92,12 @@ class TimerManager:
         return False
 
 def is_enabled():
-    """Verifica si el autobackup está habilitado desde config.py"""
     try:
         return config.CONFIG.get("autobackup_enabled", False)
     except:
         return False
 
 def enable():
-    """Habilita el autobackup en config.py"""
     try:
         config.set("autobackup_enabled", True)
         logger_mod.log_autobackup_habilitado()
@@ -123,7 +107,6 @@ def enable():
         return False
 
 def disable():
-    """Deshabilita el autobackup en config.py"""
     try:
         config.set("autobackup_enabled", False)
         logger_mod.log_autobackup_deshabilitado()
@@ -133,13 +116,10 @@ def disable():
         return False
 
 def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
-    """Encuentra la carpeta del servidor de forma inteligente"""
-    # Importar desde backup si existe
     backup = CloudModuleLoader.load_module("backup")
     if backup and hasattr(backup, 'encontrar_carpeta_servidor'):
         return backup.encontrar_carpeta_servidor(nombre_carpeta)
     
-    # Fallback básico
     ubicaciones_a_verificar = [
         f"/workspaces/{os.environ.get('CODESPACE_NAME', 'unknown')}/{nombre_carpeta}",
         os.path.join(os.getcwd(), nombre_carpeta),
@@ -154,13 +134,11 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     return None
 
 def ejecutar_backup_automatico():
-    """Ejecuta el backup automático con logging detallado"""
     global backup_timer
     
     logger_mod.log_backup_auto_inicio()
     
     try:
-        # Actualizar actividad del timer
         TimerManager.update_activity()
         
         if not config.CONFIG.get("autobackup_enabled", False):
@@ -169,7 +147,6 @@ def ejecutar_backup_automatico():
         
         utils.print_msg("INICIANDO BACKUP AUTOMÁTICO")
         
-        # Enviar mensaje al servidor Minecraft
         try:
             rcon = CloudModuleLoader.load_module("rcon")
             if rcon and hasattr(rcon, 'enviar_comando'):
@@ -196,7 +173,6 @@ def ejecutar_backup_automatico():
             utils.print_error(f"La carpeta {server_folder_config} no existe, se cancela backup automático")
             logger_mod.log_carpeta_auto_no_existe(server_folder_config)
             
-            # Enviar mensaje de error al servidor
             try:
                 rcon = CloudModuleLoader.load_module("rcon")
                 if rcon and hasattr(rcon, 'enviar_comando'):
@@ -236,7 +212,6 @@ def ejecutar_backup_automatico():
             utils.print_error("Error al crear archivo ZIP")
             logger_mod.log_compresion_auto_error()
             
-            # Enviar mensaje de error al servidor
             try:
                 rcon = CloudModuleLoader.load_module("rcon")
                 if rcon and hasattr(rcon, 'enviar_comando'):
@@ -253,7 +228,7 @@ def ejecutar_backup_automatico():
         utils.print_msg("Subiendo a MEGA...")
         logger_mod.log_subida_inicio()
         
-        cmd_upload = ["mega-put", backup_name, backup_folder]
+        cmd_upload = ["mega-put", "-c", backup_name, backup_folder + "/"]
         proceso_upload = subprocess.Popen(cmd_upload)
         proceso_upload.wait()
         
@@ -261,7 +236,6 @@ def ejecutar_backup_automatico():
             utils.print_error("Error al subir backup a MEGA")
             logger_mod.log_subida_auto_error()
             
-            # Enviar mensaje de error al servidor
             try:
                 rcon = CloudModuleLoader.load_module("rcon")
                 if rcon and hasattr(rcon, 'enviar_comando'):
@@ -286,7 +260,6 @@ def ejecutar_backup_automatico():
             utils.print_warning(f"No se pudo eliminar archivo temporal: {e}")
             logger_mod.log_archivo_local_error(e)
         
-        # Limpiar backups viejos según configuración
         backup = CloudModuleLoader.load_module("backup")
         if backup and hasattr(backup, 'limpiar_backups_antiguos'):
             backup.limpiar_backups_antiguos()
@@ -295,7 +268,6 @@ def ejecutar_backup_automatico():
         
         utils.print_msg("Backup automático completado")
         
-        # Enviar mensaje de éxito al servidor Minecraft
         try:
             rcon = CloudModuleLoader.load_module("rcon")
             if rcon and hasattr(rcon, 'enviar_comando'):
@@ -310,7 +282,6 @@ def ejecutar_backup_automatico():
         import traceback
         logger_mod.log_error_backup_auto(str(e), traceback.format_exc())
         
-        # Enviar mensaje de error al servidor
         try:
             rcon = CloudModuleLoader.load_module("rcon")
             if rcon and hasattr(rcon, 'enviar_comando'):
@@ -319,19 +290,15 @@ def ejecutar_backup_automatico():
             pass
 
 def start_autobackup(interval_minutes=None):
-    """Inicia el timer de autobackup"""
     global backup_timer, backup_timer_created_at
     
-    # Obtener intervalo de configuración si no se especifica
     if interval_minutes is None:
         interval_minutes = config.CONFIG.get("backup_interval_minutes", 30)
     
-    # Verificar si ya hay un timer activo (incluso de otra instancia)
     if TimerManager.is_timer_active():
         logger_mod.log_timer_activo(os.getpid())
         return
     
-    # Verificar si el timer local está activo
     if backup_timer is not None and backup_timer.is_alive():
         logger_mod.log_timer_local_activo()
         return
@@ -343,9 +310,7 @@ def start_autobackup(interval_minutes=None):
         global backup_timer
         ejecutar_backup_automatico()
         
-        # Reprogramar solo si sigue habilitado
         if is_enabled():
-            # Limpiar el timer actual antes de crear uno nuevo
             backup_timer = None
             TimerManager.clear_timer()
             start_autobackup(interval_minutes)
@@ -354,7 +319,6 @@ def start_autobackup(interval_minutes=None):
             backup_timer = None
             TimerManager.clear_timer()
     
-    # Marcar que se está creando un timer
     TimerManager.mark_timer_active(interval_minutes)
     logger_mod.log_timer_programado(interval_minutes, os.getpid())
     
@@ -363,7 +327,6 @@ def start_autobackup(interval_minutes=None):
     backup_timer.start()
 
 def stop_autobackup():
-    """Detiene el timer de autobackup"""
     global backup_timer
     
     if backup_timer:
@@ -371,11 +334,9 @@ def stop_autobackup():
         backup_timer = None
         logger_mod.log_timer_detenido()
     
-    # Limpiar el archivo de lock
     TimerManager.clear_timer()
 
 def toggle_autobackup():
-    """Alterna el estado del autobackup"""
     if is_enabled():
         stop_autobackup()
         disable()
@@ -386,9 +347,6 @@ def toggle_autobackup():
         logger_mod.log_autobackup_activado_usuario()
 
 def configurar_autobackup():
-    """
-    Llama a la función de configuración desde backup.py para evitar duplicación
-    """
     backup = CloudModuleLoader.load_module("backup")
     if backup and hasattr(backup, 'configurar_autobackup'):
         backup.configurar_autobackup()
@@ -397,11 +355,9 @@ def configurar_autobackup():
         utils.pausar()
 
 def init_on_load():
-    """Inicializa el autobackup si está habilitado"""
     if is_enabled():
         logger_mod.log_autobackup_verificando()
         
-        # Verificar si ya hay un timer activo
         if not TimerManager.is_timer_active():
             logger_mod.log_timer_no_activo()
             start_autobackup()
@@ -410,11 +366,9 @@ def init_on_load():
     else:
         logger_mod.log_autobackup_no_habilitado()
 
-# Registrar limpieza al salir
 import atexit
 
 def cleanup_on_exit():
-    """Limpia el timer cuando el módulo se descarga"""
     global backup_timer
     if backup_timer and backup_timer.is_alive():
         backup_timer.cancel()

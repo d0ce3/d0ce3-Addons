@@ -170,12 +170,6 @@ def ejecutar_backup_manual():
         
         print()
         
-        # Verificar y crear carpeta usando la función del módulo megacmd
-        if not megacmd.verificar_y_crear_carpeta_mega(backup_folder):
-            utils.print_error("No se pudo verificar/crear carpeta en MEGA")
-            utils.pausar()
-            return
-        
         timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         
@@ -206,7 +200,7 @@ def ejecutar_backup_manual():
         
         utils.logger.info("Iniciando subida a MEGA...")
         
-        cmd_upload = ["mega-put", backup_name, backup_folder]
+        cmd_upload = ["mega-put", "-c", backup_name, backup_folder + "/"]
         proceso_upload = subprocess.Popen(cmd_upload, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         spinner_upload = utils.Spinner("Subiendo a MEGA")
@@ -271,11 +265,6 @@ def ejecutar_backup_automatico():
             utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
             return
         
-        # Verificar y crear carpeta usando la función del módulo megacmd
-        if not megacmd.verificar_y_crear_carpeta_mega(backup_folder):
-            utils.logger.error("No se pudo verificar/crear carpeta en MEGA")
-            return
-        
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(server_folder):
             for filename in filenames:
@@ -307,7 +296,7 @@ def ejecutar_backup_automatico():
         
         utils.logger.info("Iniciando subida a MEGA...")
         
-        cmd_upload = ["mega-put", "-q", backup_name, backup_folder]
+        cmd_upload = ["mega-put", "-c", "-q", backup_name, backup_folder + "/"]
         proceso_upload = subprocess.run(cmd_upload, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         if proceso_upload.returncode != 0:
