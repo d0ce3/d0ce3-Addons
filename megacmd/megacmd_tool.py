@@ -241,23 +241,13 @@ def init():
     
     config = ModuleLoader.load_module("config")
     if not config:
-        print("⚠ No se pudo cargar módulo de configuración")
         return
     
     logger_mod = ModuleLoader.load_module("logger")
-    if logger_mod:
-        debug_enabled = config.CONFIG.get("debug_enabled", False)
-        if debug_enabled:
-            logger_mod.logger_manager.enable_debug()
-            logger_mod.info("=" * 60)
-            logger_mod.info("SISTEMA INICIADO CON DEBUG ACTIVADO")
-            logger_mod.info("=" * 60)
-        else:
-            logger_mod.debug("Sistema iniciado - logs solo en archivo")
+    if logger_mod and config.CONFIG.get("debug_enabled", False):
+        logger_mod.logger_manager.enable_debug()
     
     if AutobackupManager.is_initialized():
-        if logger_mod:
-            logger_mod.debug(f"Autobackup ya inicializado - omitiendo (PID: {os.getpid()})")
         return
     
     autobackup = ModuleLoader.load_module("autobackup")
@@ -265,14 +255,8 @@ def init():
         try:
             AutobackupManager.mark_initialized()
             autobackup.init_on_load()
-            if logger_mod:
-                logger_mod.info(f"Autobackup iniciado correctamente - PID: {os.getpid()}")
-        except Exception as e:
+        except Exception:
             AutobackupManager.clear_flag()
-            if logger_mod:
-                logger_mod.error(f"Error inicializando autobackup: {e}")
-                import traceback
-                logger_mod.error(traceback.format_exc())
 
 init()
 

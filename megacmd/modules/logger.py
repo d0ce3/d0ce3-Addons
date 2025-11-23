@@ -44,10 +44,7 @@ class LoggerManager:
                     os.makedirs(log_dir, exist_ok=True)
                 self._log_file = os.path.join(log_dir, 'megacmd_full.log')
             else:
-                cache_dir = os.path.join(base_dir, '__megacmd_cache__')
-                if not os.path.exists(cache_dir):
-                    os.makedirs(cache_dir, exist_ok=True)
-                self._log_file = os.path.join(cache_dir, '.megacmd.log')
+                self._log_file = '/var/tmp/.megacmd.log'
         except:
             self._log_file = 'megacmd_full.log'
         
