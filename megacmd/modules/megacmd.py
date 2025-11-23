@@ -133,9 +133,7 @@ def login():
         mostrar_informacion_mega()
         
         email = input("Correo electrónico: ").strip()
-        
-        import getpass
-        password = getpass.getpass("Contraseña: ")
+        password = input("Contraseña: ").strip()
     
     try:
         result = subprocess.run(["mega-login", email, password], capture_output=True, text=True, timeout=30)

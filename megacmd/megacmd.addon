@@ -17,7 +17,7 @@ text Crear Backup en MEGA
 c_exec ejecutar_backup_manual()
 
 :button listar_descargar
-text Listar y Descargar de MEGA
+text Listar backups y Descargar desde MEGA
 c_exec listar_y_descargar_mega()
 
 :button gestionar_backups
