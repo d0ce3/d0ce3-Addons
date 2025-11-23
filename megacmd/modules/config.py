@@ -2,12 +2,9 @@ import os
 import sys
 import json
 
-# CORRECCIÓN: Detectar si está empaquetado con PyInstaller
 if getattr(sys, 'frozen', False):
-    # Si está empaquetado, usar el directorio del ejecutable
     BASE_DIR = os.path.dirname(sys.executable)
 else:
-    # Modo desarrollo
     try:
         BASE_DIR = SCRIPT_BASE_DIR
     except NameError:
@@ -21,31 +18,23 @@ else:
         except NameError:
             BASE_DIR = os.getcwd()
 
-# Log para debug
-print(f"[CONFIG DEBUG] BASE_DIR establecido en: {BASE_DIR}", file=sys.stderr)
-# ============================================
 DEFAULT_CONFIG = {
     "backup_folder": "/backups",
     "server_folder": "servidor_minecraft",
     "max_backups": 5,
     "backup_interval_minutes": 5,
     "backup_prefix": "MSX",
-    "autobackup_enabled": False
+    "autobackup_enabled": False,
+    "debug_enabled": False
 }
 
-# Archivo de configuración
 CONFIG_FILE = os.path.join(BASE_DIR, "megacmd_config.json")
-
-# ============================================
-# FUNCIONES
-# ============================================
 
 def cargar_config():
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-                # Actualizar con valores por defecto si faltan claves
                 for key, value in DEFAULT_CONFIG.items():
                     if key not in config:
                         config[key] = value
@@ -60,13 +49,10 @@ def guardar_config(config=None):
     try:
         if config is None:
             config = CONFIG
-        
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        
         return True
     except Exception as e:
-        print(f"Error guardando configuración: {e}")
         return False
 
 def get(key, default=None):

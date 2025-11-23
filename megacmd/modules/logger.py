@@ -32,17 +32,19 @@ class LoggerManager:
         try:
             config = CloudModuleLoader.load_module("config")
             debug_enabled = config.CONFIG.get("debug_enabled", False) if config else False
+            base_dir = config.BASE_DIR if config else os.getcwd()
         except:
             debug_enabled = False
+            base_dir = os.getcwd()
         
         try:
             if debug_enabled:
-                log_dir = os.path.join(os.getcwd(), 'addons')
+                log_dir = os.path.join(base_dir, 'addons')
                 if not os.path.exists(log_dir):
                     os.makedirs(log_dir, exist_ok=True)
                 self._log_file = os.path.join(log_dir, 'megacmd_full.log')
             else:
-                cache_dir = os.path.join(os.getcwd(), '__megacmd_cache__')
+                cache_dir = os.path.join(base_dir, '__megacmd_cache__')
                 if not os.path.exists(cache_dir):
                     os.makedirs(cache_dir, exist_ok=True)
                 self._log_file = os.path.join(cache_dir, '.megacmd.log')
