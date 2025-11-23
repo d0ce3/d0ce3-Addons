@@ -1,8 +1,3 @@
-"""
-Módulo de Menús e Interfaz de Usuario
-Sistema centralizado de menús para MegaCMD Backup Tool
-"""
-
 import os
 import subprocess
 from datetime import datetime
