@@ -4,76 +4,156 @@ from shutil import which
 utils = CloudModuleLoader.load_module("utils")
 
 def is_installed():
-    """Verifica si está instalado"""
     return which("mega-login") is not None
 
 def is_logged_in():
-    """Verifica sesión"""
-    ok, stdout, stderr = utils.run_command(["mega-whoami"], silent=True)
-    return ok and "Not logged in" not in stdout
+    try:
+        result = subprocess.run(["mega-whoami"], capture_output=True, text=True, timeout=5)
+        return result.returncode == 0 and "Not logged in" not in result.stdout
+    except:
+        return False
+
+def mostrar_informacion_mega():
+    MORADO = "\033[95m"
+    VERDE = "\033[92m"
+    AMARILLO = "\033[93m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    
+    def m(texto):
+        return f"{MORADO}{texto}{RESET}"
+    
+    def v(texto):
+        return f"{VERDE}{texto}{RESET}"
+    
+    def a(texto):
+        return f"{AMARILLO}{texto}{RESET}"
+    
+    while True:
+        utils.limpiar_pantalla()
+        
+        print()
+        print(m("─" * 60))
+        print(f"{BOLD}{MORADO}INFORMACIÓN IMPORTANTE{RESET}")
+        print(m("─" * 60))
+        print()
+        
+        print(a("⚠️  REQUISITO PREVIO: CUENTA EN MEGA"))
+        print()
+        print("Para utilizar este método de backup es necesario tener")
+        print("una cuenta en MEGA (servicio de almacenamiento en nube).")
+        print()
+        print(m("📌 Si NO tienes una cuenta en MEGA:"))
+        print("   → Ingresa al siguiente link para crear una:")
+        print(v("   → https://mega.nz/register"))
+        print()
+        print(m("📌 Si YA tienes una cuenta en MEGA:"))
+        print("   → Puedes proceder con la configuración")
+        print()
+        print(m("💡 IMPORTANTE:"))
+        print("   • La cuenta gratuita ofrece 20GB de almacenamiento")
+        print("   • Necesitarás tu correo y contraseña para configurar")
+        print("   • Los backups se subirán automáticamente a tu cuenta")
+        print()
+        print(m("─" * 60))
+        
+        input(m("\nPresiona Enter para continuar..."))
+        
+        print()
+        respuesta = input(m("¿Estás seguro que comprendiste el texto anterior? (Si/No): ")).strip().lower()
+        
+        if respuesta in ['si', 's', 'yes', 'y']:
+            print(v("\n✓ Continuando con la configuración..."))
+            import time
+            time.sleep(1)
+            return True
+        elif respuesta in ['no', 'n']:
+            print(a("\n⚠️ Por favor, lee nuevamente la información..."))
+            import time
+            time.sleep(2)
+            continue
+        else:
+            print(a("\n⚠️ Respuesta no válida. Por favor responde Si o No."))
+            import time
+            time.sleep(2)
+            continue
 
 def install():
-    """Instala MegaCmd"""
     if is_installed():
-        utils.print_msg("MegaCmd ya está instalado", "✔")
+        utils.print_msg("MegaCmd ya está instalado", "✓")
         return True
-
-    utils.clear_screen()
-    utils.print_msg("=== Instalación de MegaCmd ===", "◰")
+    
+    utils.limpiar_pantalla()
+    utils.print_msg("Instalación de MegaCmd", "🔧")
     print()
-
-    utils.print_msg("Actualizando repositorios...", "🡻")
+    
+    utils.print_msg("Actualizando repositorios...", "📦")
     subprocess.run("sudo apt-get update -qq", shell=True, capture_output=True)
-
-    utils.print_msg("Descargando MegaCmd...", "🡻")
+    
+    utils.print_msg("Descargando MegaCmd...", "📥")
     subprocess.run(
-        "curl -s https://mega.nz/linux/repo/xUbuntu_20.04/amd64/megacmd-xUbuntu_20.04_amd64.deb -o /tmp/megacmd.deb",
-        shell=True, capture_output=True
+        'curl -s https://mega.nz/linux/repo/xUbuntu_20.04/amd64/megacmd-xUbuntu_20.04_amd64.deb -o /tmp/megacmd.deb',
+        shell=True,
+        capture_output=True
     )
-
+    
     subprocess.run("sudo dpkg -i /tmp/megacmd.deb 2>/dev/null", shell=True, capture_output=True)
-
-    utils.print_msg("Instalando dependencias...", "🡻")
+    
+    utils.print_msg("Instalando dependencias...", "⚙️")
     subprocess.run("sudo apt-get install -f -y -qq", shell=True, capture_output=True)
+    
     subprocess.run("rm -f /tmp/megacmd.deb", shell=True, capture_output=True)
-
+    
     if is_installed():
-        utils.print_msg("MegaCmd instalado correctamente", "✔")
+        utils.print_msg("MegaCmd instalado correctamente", "✓")
         return True
     else:
         utils.print_msg("Error en la instalación", "✖")
         return False
 
 def login():
-    """Login en MEGA"""
     if is_logged_in():
-        ok, stdout, stderr = utils.run_command(["mega-whoami"], silent=True)
-        utils.print_msg(f"Ya hay sesión activa: {stdout.strip()}", "✔")
+        try:
+            result = subprocess.run(["mega-whoami"], capture_output=True, text=True)
+            email = result.stdout.strip()
+            utils.print_msg(f"Ya hay sesión activa: {email}", "✓")
+        except:
+            utils.print_msg("Ya hay sesión activa", "✓")
         return True
-
-    utils.clear_screen()
-    utils.print_msg("=== Login en MEGA ===", "◰")
+    
+    utils.limpiar_pantalla()
+    utils.print_msg("Login en MEGA", "🔐")
     print()
-
+    
     import os
     email = os.getenv("MEGA_EMAIL")
     password = os.getenv("MEGA_PASSWORD")
-
+    
     if not email or not password:
-        email = utils.get_input("Email")
-        password = utils.get_input("Password")
-
-    ok, stdout, stderr = utils.run_command(["mega-login", email, password])
-
-    if ok:
-        utils.print_msg("Sesión iniciada correctamente", "✔")
-        return True
-    else:
-        utils.print_msg(f"Error al iniciar sesión: {stderr}", "✖")
+        mostrar_informacion_mega()
+        
+        email = input("Correo electrónico: ").strip()
+        
+        import getpass
+        password = getpass.getpass("Contraseña: ")
+    
+    try:
+        result = subprocess.run(["mega-login", email, password], capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            utils.print_msg("Sesión iniciada correctamente", "✓")
+            return True
+        else:
+            utils.print_msg(f"Error al iniciar sesión: {result.stderr}", "✖")
+            return False
+    except subprocess.TimeoutExpired:
+        utils.print_msg("Tiempo de espera agotado", "✖")
+        return False
+    except Exception as e:
+        utils.print_msg(f"Error: {e}", "✖")
         return False
 
 def ensure_ready():
-    """Verifica que esté listo"""
     if not install():
         return False
     if not login():
