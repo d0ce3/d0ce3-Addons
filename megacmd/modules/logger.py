@@ -70,6 +70,7 @@ class LoggerManager:
     
     def enable_debug(self):
         """Activa mensajes de debug en consola"""
+        was_enabled = self._debug_enabled
         if not self._debug_enabled:
             self._debug_enabled = True
             if self._console_handler not in self._logger.handlers:
@@ -79,13 +80,15 @@ class LoggerManager:
              self._logger.info("Modo debug activado en consola")
     
     def disable_debug(self):
-        """Desactiva mensajes de debug en consola"""
+        was_enabled = self._debug_enabled
         if self._debug_enabled:
             self._debug_enabled = False
             if self._console_handler in self._logger.handlers:
                 self._logger.removeHandler(self._console_handler)
-                self._logger.info("Modo debug desactivado en consola")
-    
+        
+        if was_enabled and not self._debug_enabled:
+            self._logger.info("Modo debug desactivado en consola")
+
     def is_debug_enabled(self):
         """Verifica si debug está activado"""
         return self._debug_enabled
