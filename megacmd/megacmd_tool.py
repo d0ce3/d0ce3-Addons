@@ -4,7 +4,6 @@ import importlib.util
 import json
 import time
 import atexit
-import signal
 
 try:
     import readline
@@ -13,16 +12,10 @@ except ImportError:
     pass
 
 VERSION = "1.0.0"
-
 LINKS_JSON_URL = "https://d0ce3.github.io/d0ce3-Addons/data/links.json"
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 CACHE_DIR = os.path.join(BASE_DIR, "__megacmd_cache__")
-
 PACKAGE_DIR = os.path.join(CACHE_DIR, "modules")
-
-# Archivo de flag para control de inicialización persistente
 AUTOBACKUP_FLAG_FILE = os.path.join(CACHE_DIR, ".autobackup_init")
 
 def ensure_requests():
@@ -46,7 +39,6 @@ class ConfigManager:
 
     @staticmethod
     def load(force=False):
-        import time
         if not force and ConfigManager._config and (time.time() - ConfigManager._last_check) < 300:
             return ConfigManager._config
         try:
@@ -57,22 +49,18 @@ class ConfigManager:
             ConfigManager._config = config.get("megacmd", {})
             ConfigManager._last_check = time.time()
             return ConfigManager._config
-        except Exception as e:
+        except Exception:
             return ConfigManager._config
 
     @staticmethod
     def get_package_url():
         config = ConfigManager.load()
-        if not config:
-            return None
-        return config.get("package")
+        return config.get("package") if config else None
 
     @staticmethod
     def get_remote_version():
         config = ConfigManager.load()
-        if not config:
-            return None
-        return config.get("version")
+        return config.get("version") if config else None
 
 class PackageManager:
     @staticmethod
@@ -88,12 +76,10 @@ class PackageManager:
             response = requests.get(package_url, timeout=60)
             if response.status_code != 200:
                 return False
-            import tempfile
+            import tempfile, zipfile, shutil
             temp_zip = os.path.join(tempfile.gettempdir(), "megacmd_temp.zip")
             with open(temp_zip, 'wb') as f:
                 f.write(response.content)
-            import zipfile
-            import shutil
             if os.path.exists(CACHE_DIR):
                 shutil.rmtree(CACHE_DIR)
             os.makedirs(PACKAGE_DIR, exist_ok=True)
@@ -101,49 +87,35 @@ class PackageManager:
                 for member in zip_ref.namelist():
                     if member.startswith('modules/') and member.endswith('.py'):
                         filename = os.path.basename(member)
-                        source = zip_ref.open(member)
-                        content = source.read()
-                        target_path = os.path.join(PACKAGE_DIR, filename)
-                        with open(target_path, 'wb') as target:
+                        content = zip_ref.open(member).read()
+                        with open(os.path.join(PACKAGE_DIR, filename), 'wb') as target:
                             target.write(content)
             os.remove(temp_zip)
             return True
-        except Exception as e:
+        except Exception:
             return False
 
     @staticmethod
     def ensure_installed():
-        if not PackageManager.is_installed():
-            return PackageManager.download_and_extract()
-        return True
+        return True if PackageManager.is_installed() else PackageManager.download_and_extract()
 
 class AutobackupManager:
-    """Gestiona la inicialización única del autobackup usando archivo de flag"""
-    
     @staticmethod
     def is_initialized():
-        """Verifica si el autobackup ya fue inicializado en esta sesión"""
         if not os.path.exists(AUTOBACKUP_FLAG_FILE):
             return False
         try:
             with open(AUTOBACKUP_FLAG_FILE, 'r') as f:
                 data = json.load(f)
-                # Verificar que no haya pasado más de 2 horas (sesión caducada)
                 init_time = data.get('init_time', 0)
-                elapsed = time.time() - init_time
-                if elapsed > 7200:  # 2 horas
+                if time.time() - init_time > 7200:
                     return False
-                # Verificar que el PID del proceso sea válido
                 pid = data.get('pid', 0)
                 if pid != os.getpid():
-                    # Es de otro proceso, verificar si todavía existe
                     try:
-                        # En Unix, esto verifica si el proceso existe
                         os.kill(pid, 0)
-                        # El proceso existe, está inicializado
                         return True
                     except (OSError, ProcessLookupError):
-                        # El proceso ya no existe, podemos reinicializar
                         return False
                 return True
         except:
@@ -151,22 +123,16 @@ class AutobackupManager:
     
     @staticmethod
     def mark_initialized():
-        """Marca el autobackup como inicializado"""
         try:
             os.makedirs(CACHE_DIR, exist_ok=True)
             with open(AUTOBACKUP_FLAG_FILE, 'w') as f:
-                json.dump({
-                    'init_time': time.time(),
-                    'version': VERSION,
-                    'pid': os.getpid()
-                }, f)
+                json.dump({'init_time': time.time(), 'version': VERSION, 'pid': os.getpid()}, f)
             return True
         except:
             return False
     
     @staticmethod
     def clear_flag():
-        """Elimina el flag de inicialización"""
         try:
             if os.path.exists(AUTOBACKUP_FLAG_FILE):
                 os.remove(AUTOBACKUP_FLAG_FILE)
@@ -188,21 +154,19 @@ class ModuleLoader:
             return None
         try:
             with open(module_file, 'r', encoding='utf-8', errors='ignore') as f:
-                source_code = f.read()
-            source_code = source_code.replace('\x00', '')
-            source_code = source_code.replace('\r\n', '\n')
+                source_code = f.read().replace('\x00', '').replace('\r\n', '\n')
             if not source_code.strip():
                 return None
             spec = importlib.util.spec_from_loader(module_name, loader=None)
             module = importlib.util.module_from_spec(spec)
-            # Inyectar variables necesarias
-            module.__dict__['__file__'] = module_file
-            module.__dict__['__name__'] = module_name
-            module.__dict__['ModuleLoader'] = ModuleLoader
-            module.__dict__['CloudModuleLoader'] = ModuleLoader
-            module.__dict__['megacmd_tool'] = sys.modules[__name__]
-            # CRÍTICO: Inyectar BASE_DIR del script principal
-            module.__dict__['SCRIPT_BASE_DIR'] = BASE_DIR
+            module.__dict__.update({
+                '__file__': module_file,
+                '__name__': module_name,
+                'ModuleLoader': ModuleLoader,
+                'CloudModuleLoader': ModuleLoader,
+                'megacmd_tool': sys.modules[__name__],
+                'SCRIPT_BASE_DIR': BASE_DIR
+            })
             exec(source_code, module.__dict__)
             sys.modules[module_name] = module
             ModuleLoader._cache[module_name] = module
@@ -218,183 +182,106 @@ class ModuleLoader:
         print("="*60 + "\n")
         remote_version = ConfigManager.get_remote_version()
         if remote_version:
-            print(f"📌 Versión local: {VERSION}")
-            print(f"📌 Versión remota: {remote_version}")
-            if remote_version == VERSION:
-                print("✓ Ya estás en la última versión")
-            else:
-                print("⚠ Hay una nueva versión disponible")
+            print(f"🔌 Versión local: {VERSION}")
+            print(f"🔌 Versión remota: {remote_version}")
+            print("✓ Ya estás en la última versión" if remote_version == VERSION else "⚠ Hay una nueva versión disponible")
             print()
         print("🧹 Limpiando cache de módulos...")
         ModuleLoader._cache.clear()
-        for key in list(sys.modules.keys()):
-            if key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger']:
+        for key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger']:
+            if key in sys.modules:
                 del sys.modules[key]
                 print(f" ✓ {key} limpiado")
-        print()
-        print("📥 Descargando paquete actualizado...")
-        if PackageManager.download_and_extract():
-            # Limpiar el flag de autobackup cuando se actualizan módulos
+        print("\n📥 Descargando paquete actualizado...")
+        success = PackageManager.download_and_extract()
+        if success:
             AutobackupManager.clear_flag()
-            print("="*60)
-            print("✅ ACTUALIZACIÓN COMPLETADA")
-            print("="*60)
-            return True
-        else:
-            print("="*60)
-            print("❌ ERROR EN ACTUALIZACIÓN")
-            print("="*60)
-            return False
-
-    @staticmethod
-    def clear_cache():
-        ModuleLoader.reload_all()
+        print("="*60)
+        print("✅ ACTUALIZACIÓN COMPLETADA" if success else "❌ ERROR EN ACTUALIZACIÓN")
+        print("="*60)
+        return success
 
 CloudModuleLoader = ModuleLoader
 
-def ejecutar_backup_manual():
-    backup = ModuleLoader.load_module("backup")
-    if backup and hasattr(backup, 'ejecutar_backup_manual'):
-        backup.ejecutar_backup_manual()
+def call_module_function(module_name, function_name):
+    module = ModuleLoader.load_module(module_name)
+    if module and hasattr(module, function_name):
+        getattr(module, function_name)()
     else:
-        print("❌ Error: función ejecutar_backup_manual no disponible")
+        print(f"❌ Error: función {function_name} no disponible")
         print("💡 Intentá actualizar los módulos")
         input("\n[+] Enter para continuar...")
 
-def listar_y_descargar_mega():
-    files = ModuleLoader.load_module("files")
-    if files and hasattr(files, 'listar_y_descargar'):
-        files.listar_y_descargar()
-    else:
-        print("❌ Error: función listar_y_descargar no disponible")
-        print("💡 Intentá actualizar los módulos")
-        input("\n[+] Enter para continuar...")
-
-def gestionar_backups_mega():
-    files = ModuleLoader.load_module("files")
-    if files and hasattr(files, 'gestionar_backups'):
-        files.gestionar_backups()
-    else:
-        print("❌ Error: función gestionar_backups no disponible")
-        print("💡 Intentá actualizar los módulos")
-        input("\n[+] Enter para continuar...")
-
-def subir_archivo_mega():
-    files = ModuleLoader.load_module("files")
-    if files and hasattr(files, 'subir_archivo'):
-        files.subir_archivo()
-    else:
-        print("❌ Error: función subir_archivo no disponible")
-        print("💡 Intentá actualizar los módulos")
-        input("\n[+] Enter para continuar...")
-
-def toggle_autobackup():
-    backup = ModuleLoader.load_module("backup")
-    if backup and hasattr(backup, 'configurar_autobackup'):
-        backup.configurar_autobackup()
-    else:
-        print("❌ Error: función configurar_autobackup no disponible")
-        print("💡 Intentá actualizar los módulos")
-        input("\n[+] Enter para continuar...")
-        
-def info_cuenta_mega():
-    files = ModuleLoader.load_module("files")
-    if files and hasattr(files, 'info_cuenta'):
-        files.info_cuenta()
-    else:
-        print("❌ Error: función info_cuenta no disponible")
-        print("💡 Intentá actualizar los módulos")
-        input("\n[+] Enter para continuar...")
+ejecutar_backup_manual = lambda: call_module_function("backup", "ejecutar_backup_manual")
+listar_y_descargar_mega = lambda: call_module_function("files", "listar_y_descargar")
+gestionar_backups_mega = lambda: call_module_function("files", "gestionar_backups")
+subir_archivo_mega = lambda: call_module_function("files", "subir_archivo")
+configurar_autobackup = lambda: call_module_function("backup", "configurar_autobackup")
+info_cuenta_mega = lambda: call_module_function("files", "info_cuenta")
+toggle_autobackup = configurar_autobackup
 
 def actualizar_modulos():
-    import time
     print("\n" + "="*60)
     print("🔄 ACTUALIZAR MÓDULOS")
     print("="*60 + "\n")
     print("Esto descargará la última versión de todos los módulos")
     print("desde GitHub Pages y limpiará el cache local.\n")
-    confirmar = input("¿Continuar con la actualización? (s/n): ").strip().lower()
-    if confirmar == 's':
+    if input("¿Continuar con la actualización? (s/n): ").strip().lower() == 's':
         success = ModuleLoader.reload_all()
-        if success:
-            print("\n✅ Módulos actualizados correctamente")
-            print("💡 Todas las funciones ahora usan la última versión")
-        else:
-            print("\n❌ Hubo un error durante la actualización")
-            print("💡 Verificá tu conexión a internet")
+        print("\n✅ Módulos actualizados correctamente" if success else "\n❌ Hubo un error durante la actualización")
+        print("💡 Todas las funciones ahora usan la última versión" if success else "💡 Verificá tu conexión a internet")
     else:
-        print("\n❌ Actualización cancelada")
-        print("\n" + "="*60 + "\n")
+        print("\n❌ Actualización cancelada\n" + "="*60 + "\n")
     input("Presioná Enter para continuar...")
 
 def init():
-    """Inicialización del sistema con control de autobackup único y logger"""
-    
-    # Cargar configuración
     ConfigManager.load()
-    
-    # Asegurar que los paquetes están instalados
     if not PackageManager.ensure_installed():
         return
     
-    # Cargar módulos necesarios
     config = ModuleLoader.load_module("config")
     if not config:
         print("⚠ No se pudo cargar módulo de configuración")
         return
     
-    utils = ModuleLoader.load_module("utils")
-    
-    # NUEVO: Inicializar logger con configuración de debug desde JSON
-    if utils and utils.logger_manager:
+    logger_mod = ModuleLoader.load_module("logger")
+    if logger_mod:
         debug_enabled = config.CONFIG.get("debug_enabled", False)
         if debug_enabled:
-            utils.logger_manager.enable_debug()
-            if hasattr(utils, 'logger'):
-                utils.logger.info("=" * 60)
-                utils.logger.info("SISTEMA INICIADO CON DEBUG ACTIVADO")
-                utils.logger.info("=" * 60)
+            logger_mod.logger_manager.enable_debug()
+            logger_mod.info("=" * 60)
+            logger_mod.info("SISTEMA INICIADO CON DEBUG ACTIVADO")
+            logger_mod.info("=" * 60)
         else:
-            if hasattr(utils, 'logger'):
-                utils.logger.debug("Sistema iniciado - logs solo en archivo")
+            logger_mod.debug("Sistema iniciado - logs solo en archivo")
     
-    # Verificar si el autobackup ya fue inicializado
     if AutobackupManager.is_initialized():
-        if utils and hasattr(utils, 'logger'):
-            utils.logger.debug("Autobackup ya inicializado - omitiendo (PID: {})".format(os.getpid()))
+        if logger_mod:
+            logger_mod.debug(f"Autobackup ya inicializado - omitiendo (PID: {os.getpid()})")
         return
     
-    # Cargar e inicializar autobackup solo si no fue inicializado antes
     autobackup = ModuleLoader.load_module("autobackup")
     if autobackup and hasattr(autobackup, 'init_on_load'):
         try:
-            # Marcar ANTES de inicializar para prevenir race conditions
             AutobackupManager.mark_initialized()
             autobackup.init_on_load()
-            if utils and hasattr(utils, 'logger'):
-                utils.logger.info("Autobackup iniciado correctamente - PID: {}".format(os.getpid()))
+            if logger_mod:
+                logger_mod.info(f"Autobackup iniciado correctamente - PID: {os.getpid()}")
         except Exception as e:
-            # Si falla, limpiar el flag para permitir reintentos
             AutobackupManager.clear_flag()
-            if utils and hasattr(utils, 'logger'):
-                utils.logger.error(f"Error inicializando autobackup: {e}")
+            if logger_mod:
+                logger_mod.error(f"Error inicializando autobackup: {e}")
                 import traceback
-                utils.logger.error(traceback.format_exc())
+                logger_mod.error(traceback.format_exc())
 
-# Inicializar el sistema
 init()
 
-# Registrar limpieza al salir
+@atexit.register
 def cleanup_on_exit():
-    """Limpia el flag de autobackup cuando el programa termina"""
     try:
-        # Solo limpiar si el PID coincide
         if os.path.exists(AUTOBACKUP_FLAG_FILE):
             with open(AUTOBACKUP_FLAG_FILE, 'r') as f:
-                data = json.load(f)
-                if data.get('pid') == os.getpid():
+                if json.load(f).get('pid') == os.getpid():
                     AutobackupManager.clear_flag()
     except:
         pass
-
-atexit.register(cleanup_on_exit)
