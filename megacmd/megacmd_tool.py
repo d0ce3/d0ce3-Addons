@@ -276,19 +276,6 @@ def init():
 
 init()
 
-print("\n" + "="*60)
-print("[DEBUG] INFORMACIÓN DE RUTAS")
-print("="*60)
-print(f"BASE_DIR: {BASE_DIR}")
-print(f"CACHE_DIR: {CACHE_DIR}")
-print(f"PACKAGE_DIR: {PACKAGE_DIR}")
-print(f"¿Existe CACHE_DIR?: {os.path.exists(CACHE_DIR)}")
-if os.path.exists(PACKAGE_DIR):
-    print(f"Módulos en PACKAGE_DIR: {os.listdir(PACKAGE_DIR)}")
-else:
-    print("PACKAGE_DIR NO EXISTE")
-print("="*60 + "\n")
-
 @atexit.register
 def cleanup_on_exit():
     try:
