@@ -128,7 +128,7 @@ class InputHandler:
                     Display.warning(f"Número mayor o igual a {min_val}")
             except ValueError:
                 if permitir_x:
-                    Display.warning("Ingrese número válido o 'x' para volver")
+                    Display.warning("Ingrese número válido o 'x' para cancelar")
                 else:
                     Display.warning("Ingrese número válido")
             except KeyboardInterrupt:
@@ -285,11 +285,11 @@ class MenuBackup:
                 estado_color = Tema.rojo(estado_texto)
             
             print(Tema.m("┌" + "─" * 48 + "┐"))
-            print(Tema.m(f"│ Estado:    {estado_color:<23} │"))
-            print(Tema.m(f"│ Intervalo: {Tema.blanco(f'{intervalo_actual} min'):<31} │"))
-            print(Tema.m(f"│ Carpeta:   {Tema.blanco(server_folder):<31} │"))
-            print(Tema.m(f"│ Destino:   {Tema.blanco(backup_folder):<31} │"))
-            print(Tema.m(f"│ Máximo:    {Tema.blanco(f'{max_backups} backups'):<31} │"))
+            print(Tema.m(f"│ Estado:    {estado_color}                    │"))
+            print(Tema.m(f"│ Intervalo: {Tema.blanco(f'{intervalo_actual} min'):<38} │"))
+            print(Tema.m(f"│ Carpeta:   {Tema.blanco(server_folder):<38} │"))
+            print(Tema.m(f"│ Destino:   {Tema.blanco(backup_folder):<38} │"))
+            print(Tema.m(f"│ Máximo:    {Tema.blanco(f'{max_backups} backups'):<38} │"))
             print(Tema.m("└" + "─" * 48 + "┘"))
             print()
             
@@ -477,15 +477,39 @@ class MenuArchivos:
                 Display.warning("No hay archivos ZIP")
                 return
             
-            Display.lista_archivos(archivos)
+            print(Tema.m(f"Total: {len(archivos)} archivos\n"))
+            
+            print(Tema.m("┌" + "─" * 10 + "┬" + "─" * 14 + "┬" + "─" * 10 + "┐"))
+            print(Tema.m(f"│ {'Nombre':<8} │ {'Fecha':<12} │ {'Hora':<8} │"))
+            print(Tema.m("├" + "─" * 10 + "┼" + "─" * 14 + "┼" + "─" * 10 + "┤"))
+            
+            for archivo in archivos:
+                nombre_completo = archivo['nombre']
+                try:
+                    nombre_sin_ext = nombre_completo.replace('.zip', '')
+                    partes = nombre_sin_ext.split('_')
+                    if len(partes) >= 3:
+                        prefijo = partes[0]
+                        fecha = partes[1].replace('-', '/')
+                        hora = partes[2].replace('-', ':')
+                        print(Tema.m(f"│ {prefijo:<8} │ {fecha:<12} │ {hora:<8} │"))
+                    else:
+                        print(Tema.m(f"│ {nombre_completo:<34} │"))
+                except:
+                    print(Tema.m(f"│ {nombre_completo:<34} │"))
+            
+            print(Tema.m("└" + "─" * 10 + "┴" + "─" * 14 + "┴" + "─" * 10 + "┘"))
+            
+            print()
             
             seleccion = InputHandler.seleccionar_numero(
-                "\nArchivo a descargar (0=cancelar)",
-                min_val=0,
-                max_val=len(archivos)
+                "Archivo a descargar (número, x=cancelar)",
+                min_val=1,
+                max_val=len(archivos),
+                permitir_x=True
             )
             
-            if seleccion == 0 or seleccion is None:
+            if seleccion == 'x' or seleccion is None:
                 print("Cancelado")
                 return
             
@@ -548,25 +572,25 @@ class MenuArchivos:
             
             print(Tema.m(f"Total: {len(archivos)} backups\n"))
             
-            print(Tema.m("┌" + "─" * 48 + "┐"))
+            print(Tema.m("┌" + "─" * 10 + "┬" + "─" * 14 + "┬" + "─" * 10 + "┐"))
+            print(Tema.m(f"│ {'Nombre':<8} │ {'Fecha':<12} │ {'Hora':<8} │"))
+            print(Tema.m("├" + "─" * 10 + "┼" + "─" * 14 + "┼" + "─" * 10 + "┤"))
+            
             for archivo in archivos:
                 try:
                     nombre_sin_ext = archivo.replace('.zip', '')
                     partes = nombre_sin_ext.split('_')
                     if len(partes) >= 3:
                         prefijo = partes[0]
-                        fecha = partes[1]
+                        fecha = partes[1].replace('-', '/')
                         hora = partes[2].replace('-', ':')
-                        
-                        fecha_formateada = fecha.replace('-', '/')
-                        linea = f"│ {prefijo:<6} {fecha_formateada:<12} {hora:<8} │"
+                        print(Tema.m(f"│ {prefijo:<8} │ {fecha:<12} │ {hora:<8} │"))
                     else:
-                        linea = f"│ {archivo:<44} │"
+                        print(Tema.m(f"│ {archivo:<34} │"))
                 except:
-                    linea = f"│ {archivo:<44} │"
-                
-                print(Tema.m(linea))
-            print(Tema.m("└" + "─" * 48 + "┘"))
+                    print(Tema.m(f"│ {archivo:<34} │"))
+            
+            print(Tema.m("└" + "─" * 10 + "┴" + "─" * 14 + "┴" + "─" * 10 + "┘"))
             
             print()
             
@@ -598,12 +622,13 @@ class MenuArchivos:
     
     def _eliminar_backup(self, archivos, backup_folder):
         num = InputHandler.seleccionar_numero(
-            "\nBackup a eliminar (0=cancelar)",
-            min_val=0,
-            max_val=len(archivos)
+            "\nBackup a eliminar (número, x=cancelar)",
+            min_val=1,
+            max_val=len(archivos),
+            permitir_x=True
         )
         
-        if num == 0 or num is None:
+        if num == 'x' or num is None:
             print("Cancelado")
             return
         
