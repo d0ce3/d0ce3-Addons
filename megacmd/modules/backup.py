@@ -467,17 +467,17 @@ def configurar_autobackup():
             print("💡 Recomendado: 5 backups")
             while True:
                 try:
-                    nuevo_max = input("   Nueva cantidad máxima (1-20): ").strip()
+                    nuevo_max = input("   Nueva cantidad máxima (1-10): ").strip()
                     if not nuevo_max:
                         break
                     nuevo_max = int(nuevo_max)
-                    if 1 <= nuevo_max <= 20:
+                    if 1 <= nuevo_max <= 10:
                         config.set("max_backups", nuevo_max)
                         utils.print_msg(f"Máximo de backups cambiado a {nuevo_max}")
                         utils.logger.info(f"Máximo de backups cambiado a {nuevo_max}")
                         break
                     else:
-                        utils.print_warning("Cantidad debe estar entre 1 y 20")
+                        utils.print_warning("Cantidad debe estar entre 1 y 10")
                 except ValueError:
                     utils.print_warning("Ingrese un número válido")
                 except KeyboardInterrupt:

@@ -143,3 +143,229 @@ warning = logger_manager.warning
 error = logger_manager.error
 debug = logger_manager.debug
 exception = logger_manager.exception
+
+
+# ============================================================================
+# FUNCIONES DE LOGGING SIMPLIFICADAS PARA BACKUPS
+# ============================================================================
+
+def log_backup_inicio():
+    """Log de inicio de backup"""
+    logger_manager.info("========== INICIO BACKUP ==========")
+
+def log_backup_fin():
+    """Log de fin de backup"""
+    logger_manager.info("========== FIN BACKUP ==========")
+
+def log_backup_auto_inicio():
+    """Log de inicio de backup automático"""
+    logger_manager.info("========== INICIO BACKUP AUTOMÁTICO ==========")
+
+def log_backup_auto_fin():
+    """Log de fin de backup automático"""
+    logger_manager.info("========== FIN BACKUP AUTOMÁTICO ==========")
+
+def log_config_carpeta(server_folder_config, base_dir, cwd, parent_dir, resolved, exists, destino):
+    """Log detallado de configuración de carpetas"""
+    logger_manager.info(f"Configuración - Carpeta config: {server_folder_config}")
+    logger_manager.info(f"Configuración - BASE_DIR: {base_dir}")
+    logger_manager.info(f"Configuración - os.getcwd(): {cwd}")
+    logger_manager.info(f"Configuración - parent de BASE_DIR: {parent_dir}")
+    logger_manager.info(f"Configuración - Carpeta resuelta: {resolved}")
+    logger_manager.info(f"Configuración - ¿Existe? {exists}")
+    logger_manager.info(f"Configuración - Destino: {destino}")
+
+def log_carpeta_encontrada(ubicacion):
+    """Log cuando se encuentra la carpeta del servidor"""
+    logger_manager.info(f"Carpeta del servidor encontrada en: {ubicacion}")
+
+def log_carpeta_no_encontrada(nombre_carpeta):
+    """Log cuando no se encuentra la carpeta"""
+    logger_manager.error(f"No se pudo encontrar la carpeta '{nombre_carpeta}'")
+
+def log_tamano_carpeta(size_mb):
+    """Log del tamaño de carpeta"""
+    logger_manager.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
+
+def log_nombre_backup(backup_name):
+    """Log del nombre del backup"""
+    logger_manager.info(f"Nombre de backup: {backup_name}")
+
+def log_compresion_inicio():
+    """Log de inicio de compresión"""
+    logger_manager.info("Iniciando compresión...")
+
+def log_compresion_error():
+    """Log de error en compresión"""
+    logger_manager.error("Fallo en compresión")
+
+def log_compresion_auto_error():
+    """Log de error en compresión automática"""
+    logger_manager.error("Error durante compresión automática")
+
+def log_archivo_creado(backup_name, size_mb):
+    """Log de archivo creado exitosamente"""
+    logger_manager.info(f"Archivo creado: {backup_name} ({size_mb:.1f} MB)")
+
+def log_archivo_no_encontrado(backup_name):
+    """Log cuando no se encuentra el archivo"""
+    logger_manager.error(f"Archivo {backup_name} no encontrado")
+
+def log_subida_inicio():
+    """Log de inicio de subida a MEGA"""
+    logger_manager.info("Iniciando subida a MEGA...")
+
+def log_subida_error():
+    """Log de error en subida"""
+    logger_manager.error("Fallo en subida a MEGA")
+
+def log_subida_auto_error():
+    """Log de error en subida automática"""
+    logger_manager.error("Error al subir backup automático a MEGA")
+
+def log_subida_exitosa(backup_folder, backup_name):
+    """Log de subida exitosa"""
+    logger_manager.info(f"Backup subido exitosamente a {backup_folder}/{backup_name}")
+
+def log_subida_auto_exitosa(backup_folder, backup_name):
+    """Log de subida automática exitosa"""
+    logger_manager.info(f"Backup automático subido exitosamente: {backup_folder}/{backup_name}")
+
+def log_archivo_local_eliminado():
+    """Log de eliminación de archivo local"""
+    logger_manager.info("Archivo local eliminado")
+
+def log_archivo_local_error(error):
+    """Log de error al eliminar archivo local"""
+    logger_manager.warning(f"Error eliminando archivo local: {error}")
+
+def log_backup_cancelado():
+    """Log de backup cancelado por usuario"""
+    logger_manager.info("Backup cancelado por usuario")
+
+def log_carpeta_no_existe(carpeta):
+    """Log cuando la carpeta no existe"""
+    logger_manager.error(f"Carpeta {carpeta} no encontrada")
+
+def log_carpeta_auto_no_existe(carpeta):
+    """Log cuando la carpeta no existe en backup automático"""
+    logger_manager.error(f"Carpeta {carpeta} no encontrada, se cancela backup automático")
+
+def log_error_backup(error, traceback_str):
+    """Log de error general en backup"""
+    logger_manager.error(f"Error en crear_backup: {error}")
+    logger_manager.error(traceback_str)
+
+def log_error_backup_auto(error, traceback_str):
+    """Log de error en backup automático"""
+    logger_manager.error(f"Error en backup automático: {error}")
+    logger_manager.error(traceback_str)
+
+def log_autobackup_desactivado():
+    """Log cuando autobackup está desactivado"""
+    logger_manager.info("Autobackup desactivado, no se ejecutará")
+
+def log_autobackup_habilitado():
+    """Log cuando se habilita autobackup"""
+    logger_manager.info("Autobackup habilitado")
+
+def log_autobackup_deshabilitado():
+    """Log cuando se deshabilita autobackup"""
+    logger_manager.info("Autobackup deshabilitado")
+
+def log_timer_activo(pid):
+    """Log cuando el timer ya está activo"""
+    logger_manager.info(f"Timer de autobackup ya activo en proceso - omitiendo (PID actual: {pid})")
+
+def log_timer_local_activo():
+    """Log cuando el timer local está activo"""
+    logger_manager.info("Timer local de autobackup ya activo, no se crea uno nuevo")
+
+def log_timer_programado(interval_minutes, pid):
+    """Log cuando se programa un nuevo timer"""
+    logger_manager.info(f"Nuevo timer programado para {interval_minutes} minutos (PID: {pid})")
+    logger_manager.info(f"Autobackup activado - cada {interval_minutes} minutos")
+
+def log_timer_detenido():
+    """Log cuando se detiene el timer"""
+    logger_manager.info("Timer de autobackup detenido")
+
+def log_rcon_error_inicio(error):
+    """Log cuando falla el mensaje RCON de inicio"""
+    logger_manager.warning(f"No se pudo enviar mensaje RCON de inicio: {error}")
+
+def log_rcon_error_fin(error):
+    """Log cuando falla el mensaje RCON de fin"""
+    logger_manager.warning(f"No se pudo enviar mensaje RCON de fin: {error}")
+
+def log_limpiar_backups(max_backups):
+    """Log de inicio de limpieza de backups"""
+    logger_manager.info(f"Limpiando backups antiguos (mantener {max_backups})...")
+
+def log_backups_encontrados(cantidad):
+    """Log de cantidad de backups encontrados"""
+    logger_manager.info(f"Backups encontrados: {cantidad}")
+
+def log_backup_eliminado(archivo):
+    """Log de backup eliminado"""
+    logger_manager.info(f"Eliminado: {archivo}")
+
+def log_error_eliminar_backup(archivo):
+    """Log de error al eliminar backup"""
+    logger_manager.warning(f"Error eliminando {archivo}")
+
+def log_limpieza_completada(cantidad):
+    """Log de limpieza completada"""
+    logger_manager.info(f"Limpieza completada - {cantidad} backups eliminados")
+
+def log_menu_autobackup():
+    """Log de menú de configuración"""
+    logger_manager.info("========== MENÚ CONFIGURAR AUTOBACKUP ==========")
+
+def log_autobackup_activado_usuario():
+    """Log cuando el usuario activa autobackup"""
+    logger_manager.info("Autobackup activado por usuario")
+
+def log_autobackup_desactivado_usuario():
+    """Log cuando el usuario desactiva autobackup"""
+    logger_manager.info("Autobackup desactivado por usuario")
+
+def log_intervalo_cambiado(minutos):
+    """Log de cambio de intervalo"""
+    logger_manager.info(f"Intervalo cambiado a {minutos} minutos")
+
+def log_destino_cambiado(destino):
+    """Log de cambio de destino MEGA"""
+    logger_manager.info(f"Destino MEGA cambiado a: {destino}")
+
+def log_max_backups_cambiado(cantidad):
+    """Log de cambio de máximo de backups"""
+    logger_manager.info(f"Máximo de backups cambiado a {cantidad}")
+
+def log_salir_config():
+    """Log al salir de configuración"""
+    logger_manager.info("Saliendo de configuración de autobackup")
+
+def log_autobackup_verificando():
+    """Log al verificar timer"""
+    logger_manager.info("Autobackup está habilitado, verificando timer...")
+
+def log_timer_no_activo():
+    """Log cuando no hay timer activo"""
+    logger_manager.info("No hay timer activo, iniciando autobackup...")
+
+def log_timer_otro_proceso():
+    """Log cuando hay timer en otro proceso"""
+    logger_manager.info("Timer ya activo en otro proceso, no se inicia uno nuevo")
+
+def log_autobackup_no_habilitado():
+    """Log cuando autobackup no está habilitado"""
+    logger_manager.info("Autobackup no está habilitado")
+
+def log_error_listando_backups(error):
+    """Log de error al listar backups"""
+    logger_manager.error(f"Error listando backups: {error}")
+
+def log_error_limpiar_backups(error):
+    """Log de error en limpieza de backups"""
+    logger_manager.error(f"Error en limpiar_backups_antiguos: {error}")

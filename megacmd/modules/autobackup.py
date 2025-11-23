@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
+logger_mod = CloudModuleLoader.load_module("logger")
 
 backup_timer = None
 backup_timer_created_at = None
@@ -104,7 +105,6 @@ class TimerManager:
             pass
         return False
 
-# CAMBIO IMPORTANTE: Ahora usa config.py en lugar de archivo separado
 def is_enabled():
     """Verifica si el autobackup está habilitado desde config.py"""
     try:
@@ -116,7 +116,7 @@ def enable():
     """Habilita el autobackup en config.py"""
     try:
         config.set("autobackup_enabled", True)
-        utils.logger.info("Autobackup habilitado")
+        logger_mod.log_autobackup_habilitado()
         return True
     except Exception as e:
         utils.logger.error(f"Error habilitando autobackup: {e}")
@@ -126,7 +126,7 @@ def disable():
     """Deshabilita el autobackup en config.py"""
     try:
         config.set("autobackup_enabled", False)
-        utils.logger.info("Autobackup deshabilitado")
+        logger_mod.log_autobackup_deshabilitado()
         return True
     except Exception as e:
         utils.logger.error(f"Error deshabilitando autobackup: {e}")
@@ -157,14 +157,14 @@ def ejecutar_backup_automatico():
     """Ejecuta el backup automático con logging detallado"""
     global backup_timer
     
-    utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
+    logger_mod.log_backup_auto_inicio()
     
     try:
         # Actualizar actividad del timer
         TimerManager.update_activity()
         
         if not config.CONFIG.get("autobackup_enabled", False):
-            utils.logger.info("Autobackup desactivado, no se ejecutará")
+            logger_mod.log_autobackup_desactivado()
             return
         
         utils.print_msg("INICIANDO BACKUP AUTOMÁTICO")
@@ -175,24 +175,26 @@ def ejecutar_backup_automatico():
             if rcon and hasattr(rcon, 'enviar_comando'):
                 rcon.enviar_comando("say [BACKUP] Iniciando backup automático...")
         except Exception as e:
-            utils.logger.warning(f"No se pudo enviar mensaje RCON de inicio: {e}")
+            logger_mod.log_rcon_error_inicio(e)
         
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
         server_folder = encontrar_carpeta_servidor(server_folder_config)
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
         
-        utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
-        utils.logger.info(f"Configuración - BASE_DIR: {config.BASE_DIR}")
-        utils.logger.info(f"Configuración - os.getcwd(): {os.getcwd()}")
-        utils.logger.info(f"Configuración - parent de BASE_DIR: {os.path.dirname(config.BASE_DIR)}")
-        utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
-        utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder) if server_folder else False}")
-        utils.logger.info(f"Configuración - Destino: {backup_folder}")
+        logger_mod.log_config_carpeta(
+            server_folder_config,
+            config.BASE_DIR,
+            os.getcwd(),
+            os.path.dirname(config.BASE_DIR),
+            server_folder,
+            os.path.exists(server_folder) if server_folder else False,
+            backup_folder
+        )
         
         if not server_folder or not os.path.exists(server_folder):
             utils.print_error(f"La carpeta {server_folder_config} no existe, se cancela backup automático")
-            utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
+            logger_mod.log_carpeta_auto_no_existe(server_folder_config)
             
             # Enviar mensaje de error al servidor
             try:
@@ -216,16 +218,15 @@ def ejecutar_backup_automatico():
         
         size_mb = total_size / (1024 * 1024)
         utils.print_msg(f"Tamaño total: {size_mb:.1f} MB")
-        utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
+        logger_mod.log_tamano_carpeta(size_mb)
         
-        # USAR TIMEZONE DE ARGENTINA
         timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         utils.print_msg(f"Archivo a crear: {backup_name}")
-        utils.logger.info(f"Nombre de backup: {backup_name}")
+        logger_mod.log_nombre_backup(backup_name)
         
         utils.print_msg("Comprimiendo...")
-        utils.logger.info("Iniciando compresión...")
+        logger_mod.log_compresion_inicio()
         
         cmd = ["zip", "-r", "-q", backup_name, server_folder]
         proceso = subprocess.Popen(cmd)
@@ -233,7 +234,7 @@ def ejecutar_backup_automatico():
         
         if not os.path.exists(backup_name):
             utils.print_error("Error al crear archivo ZIP")
-            utils.logger.error("Error durante compresión automática")
+            logger_mod.log_compresion_auto_error()
             
             # Enviar mensaje de error al servidor
             try:
@@ -247,10 +248,10 @@ def ejecutar_backup_automatico():
         
         backup_size_mb = os.path.getsize(backup_name) / (1024 * 1024)
         utils.print_msg(f"Archivo comprimido: {backup_name} ({backup_size_mb:.1f} MB)")
-        utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
+        logger_mod.log_archivo_creado(backup_name, backup_size_mb)
         
         utils.print_msg("Subiendo a MEGA...")
-        utils.logger.info("Iniciando subida a MEGA...")
+        logger_mod.log_subida_inicio()
         
         cmd_upload = ["mega-put", backup_name, backup_folder]
         proceso_upload = subprocess.Popen(cmd_upload)
@@ -258,7 +259,7 @@ def ejecutar_backup_automatico():
         
         if proceso_upload.returncode != 0:
             utils.print_error("Error al subir backup a MEGA")
-            utils.logger.error("Error al subir backup automático a MEGA")
+            logger_mod.log_subida_auto_error()
             
             # Enviar mensaje de error al servidor
             try:
@@ -275,15 +276,15 @@ def ejecutar_backup_automatico():
             return
         
         utils.print_msg(f"Backup subido a MEGA en {backup_folder}/{backup_name}")
-        utils.logger.info(f"Backup automático subido exitosamente: {backup_folder}/{backup_name}")
+        logger_mod.log_subida_auto_exitosa(backup_folder, backup_name)
         
         try:
             os.remove(backup_name)
             utils.print_msg("Archivo temporal eliminado")
-            utils.logger.info("Archivo local eliminado")
+            logger_mod.log_archivo_local_eliminado()
         except Exception as e:
             utils.print_warning(f"No se pudo eliminar archivo temporal: {e}")
-            utils.logger.warning(f"No se pudo eliminar archivo local: {e}")
+            logger_mod.log_archivo_local_error(e)
         
         # Limpiar backups viejos según configuración
         backup = CloudModuleLoader.load_module("backup")
@@ -300,15 +301,14 @@ def ejecutar_backup_automatico():
             if rcon and hasattr(rcon, 'enviar_comando'):
                 rcon.enviar_comando("say [BACKUP] Backup completado exitosamente")
         except Exception as e:
-            utils.logger.warning(f"No se pudo enviar mensaje RCON de fin: {e}")
+            logger_mod.log_rcon_error_fin(e)
         
-        utils.logger.info("========== FIN BACKUP AUTOMÁTICO ==========")
+        logger_mod.log_backup_auto_fin()
         
     except Exception as e:
         utils.print_error(f"Error en backup automático: {e}")
-        utils.logger.error(f"Error en backup automático: {str(e)}")
         import traceback
-        utils.logger.error(traceback.format_exc())
+        logger_mod.log_error_backup_auto(str(e), traceback.format_exc())
         
         # Enviar mensaje de error al servidor
         try:
@@ -328,12 +328,12 @@ def start_autobackup(interval_minutes=None):
     
     # Verificar si ya hay un timer activo (incluso de otra instancia)
     if TimerManager.is_timer_active():
-        utils.logger.info(f"Timer de autobackup ya activo en proceso - omitiendo (PID actual: {os.getpid()})")
+        logger_mod.log_timer_activo(os.getpid())
         return
     
     # Verificar si el timer local está activo
     if backup_timer is not None and backup_timer.is_alive():
-        utils.logger.info("Timer local de autobackup ya activo, no se crea uno nuevo")
+        logger_mod.log_timer_local_activo()
         return
     
     now = datetime.now(TIMEZONE_ARG)
@@ -350,14 +350,13 @@ def start_autobackup(interval_minutes=None):
             TimerManager.clear_timer()
             start_autobackup(interval_minutes)
         else:
-            utils.logger.info("Autobackup deshabilitado, no se reprograma timer")
+            logger_mod.log_autobackup_desactivado()
             backup_timer = None
             TimerManager.clear_timer()
     
     # Marcar que se está creando un timer
     TimerManager.mark_timer_active(interval_minutes)
-    utils.logger.info(f"Nuevo timer programado para {interval_minutes} minutos (PID: {os.getpid()})")
-    utils.logger.info(f"Autobackup activado - cada {interval_minutes} minutos")
+    logger_mod.log_timer_programado(interval_minutes, os.getpid())
     
     backup_timer = threading.Timer(interval_minutes * 60, timer_callback)
     backup_timer.daemon = True
@@ -370,7 +369,7 @@ def stop_autobackup():
     if backup_timer:
         backup_timer.cancel()
         backup_timer = None
-        utils.logger.info("Timer de autobackup detenido")
+        logger_mod.log_timer_detenido()
     
     # Limpiar el archivo de lock
     TimerManager.clear_timer()
@@ -380,167 +379,36 @@ def toggle_autobackup():
     if is_enabled():
         stop_autobackup()
         disable()
-        utils.logger.info("Autobackup desactivado por usuario")
+        logger_mod.log_autobackup_desactivado_usuario()
     else:
         enable()
         start_autobackup()
-        utils.logger.info("Autobackup activado por usuario")
+        logger_mod.log_autobackup_activado_usuario()
 
 def configurar_autobackup():
     """
-    Menú interactivo para configurar el autobackup
+    Llama a la función de configuración desde backup.py para evitar duplicación
     """
-    # Verificar MegaCMD
-    if not utils.verificar_megacmd():
-        utils.print_error("MegaCMD no está disponible")
+    backup = CloudModuleLoader.load_module("backup")
+    if backup and hasattr(backup, 'configurar_autobackup'):
+        backup.configurar_autobackup()
+    else:
+        utils.print_error("No se pudo cargar el módulo de configuración")
         utils.pausar()
-        return
-    
-    while True:
-        utils.limpiar_pantalla()
-        print("\n" + "=" * 60)
-        print("CONFIGURAR AUTOBACKUP")
-        print("=" * 60 + "\n")
-        
-        # Obtener configuración actual
-        autobackup_enabled = config.CONFIG.get("autobackup_enabled", False)
-        intervalo_actual = config.CONFIG.get("backup_interval_minutes", 5)
-        backup_folder = config.CONFIG.get("backup_folder", "/backups")
-        server_folder = config.CONFIG.get("server_folder", "servidor_minecraft")
-        max_backups = config.CONFIG.get("max_backups", 5)
-        
-        # Mostrar configuración actual
-        print("📋 CONFIGURACIÓN ACTUAL:")
-        print(f"   Estado: {'✓ ACTIVADO' if autobackup_enabled else '✗ DESACTIVADO'}")
-        print(f"   Intervalo: cada {intervalo_actual} minutos")
-        print(f"   Carpeta servidor: {server_folder}")
-        print(f"   Destino MEGA: {backup_folder}")
-        print(f"   Máximo backups: {max_backups}")
-        print()
-        
-        utils.logger.info("========== MENÚ CONFIGURAR AUTOBACKUP ==========")
-        
-        # Menú de opciones
-        print("OPCIONES:")
-        if autobackup_enabled:
-            print("   1. Desactivar autobackup")
-        else:
-            print("   1. Activar autobackup")
-        
-        print("   2. Cambiar intervalo de autobackup")
-        print("   3. Cambiar ruta de guardado")
-        print("   4. Cambiar backups máximos")
-        print("   0. Volver")
-        print()
-        
-        opcion = input("Seleccione una opción: ").strip()
-        
-        if opcion == "1":
-            # Activar/Desactivar
-            if autobackup_enabled:
-                config.CONFIG["autobackup_enabled"] = False
-                config.guardar_config()
-                stop_autobackup()
-                utils.print_msg("Autobackup desactivado")
-                utils.logger.info("Autobackup desactivado por usuario")
-            else:
-                config.CONFIG["autobackup_enabled"] = True
-                config.guardar_config()
-                utils.print_msg("Autobackup activado")
-                utils.logger.info("Autobackup activado por usuario")
-                print("\n⚠️  Nota: Reinicie el addon para aplicar los cambios")
-            
-            utils.pausar()
-        
-        elif opcion == "2":
-            # Cambiar intervalo
-            print(f"\n⏱️  Intervalo actual: {intervalo_actual} minutos")
-            while True:
-                try:
-                    nuevo_intervalo = input("   Nuevo intervalo en minutos (1-60): ").strip()
-                    if not nuevo_intervalo:
-                        break
-                    
-                    nuevo_intervalo = int(nuevo_intervalo)
-                    if 1 <= nuevo_intervalo <= 60:
-                        config.CONFIG["backup_interval_minutes"] = nuevo_intervalo
-                        config.guardar_config()
-                        utils.print_msg(f"Intervalo cambiado a {nuevo_intervalo} minutos")
-                        utils.logger.info(f"Intervalo cambiado a {nuevo_intervalo} minutos")
-                        break
-                    else:
-                        utils.print_warning("Intervalo debe estar entre 1 y 60 minutos")
-                except ValueError:
-                    utils.print_warning("Ingrese un número válido")
-                except KeyboardInterrupt:
-                    print("\nCancelado")
-                    break
-            
-            utils.pausar()
-        
-        elif opcion == "3":
-            # Cambiar ruta de guardado
-            print(f"\n☁️  Destino MEGA actual: {backup_folder}\n")
-            nuevo_destino = input("   Nueva carpeta MEGA (ej: /backups): ").strip()
-            if nuevo_destino:
-                if not nuevo_destino.startswith("/"):
-                    nuevo_destino = "/" + nuevo_destino
-                
-                config.CONFIG["backup_folder"] = nuevo_destino
-                config.guardar_config()
-                utils.print_msg(f"Carpeta cambiada a: {nuevo_destino}")
-                utils.logger.info(f"Destino MEGA cambiado a: {nuevo_destino}")
-            
-            utils.pausar()
-        
-        elif opcion == "4":
-            # Cambiar máximo de backups
-            print(f"\n🗂️  Máximo de backups actual: {max_backups}")
-            print("💡 Recomendado: 5 backups")
-            while True:
-                try:
-                    nuevo_max = input("   Nueva cantidad máxima (1-10): ").strip()
-                    if not nuevo_max:
-                        break
-                    
-                    nuevo_max = int(nuevo_max)
-                    if 1 <= nuevo_max <= 10:
-                        config.CONFIG["max_backups"] = nuevo_max
-                        config.guardar_config()
-                        utils.print_msg(f"Máximo de backups cambiado a {nuevo_max}")
-                        utils.logger.info(f"Máximo de backups cambiado a {nuevo_max}")
-                        break
-                    else:
-                        utils.print_warning("Cantidad debe estar entre 1 y 10")
-                except ValueError:
-                    utils.print_warning("Ingrese un número válido")
-                except KeyboardInterrupt:
-                    print("\nCancelado")
-                    break
-            
-            utils.pausar()
-        
-        elif opcion == "0":
-            utils.logger.info("Saliendo de configuración de autobackup")
-            break
-        
-        else:
-            utils.print_warning("Opción inválida")
-            utils.pausar()
 
 def init_on_load():
     """Inicializa el autobackup si está habilitado"""
     if is_enabled():
-        utils.logger.info("Autobackup está habilitado, verificando timer...")
+        logger_mod.log_autobackup_verificando()
         
         # Verificar si ya hay un timer activo
         if not TimerManager.is_timer_active():
-            utils.logger.info("No hay timer activo, iniciando autobackup...")
+            logger_mod.log_timer_no_activo()
             start_autobackup()
         else:
-            utils.logger.info("Timer ya activo en otro proceso, no se inicia uno nuevo")
+            logger_mod.log_timer_otro_proceso()
     else:
-        utils.logger.info("Autobackup no está habilitado")
+        logger_mod.log_autobackup_no_habilitado()
 
 # Registrar limpieza al salir
 import atexit
