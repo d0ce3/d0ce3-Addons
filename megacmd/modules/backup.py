@@ -1,9 +1,3 @@
-"""
-Módulo de Backup
-Funciones de lógica de negocio para gestión de backups
-Las funciones de interfaz de usuario están en menu.py
-"""
-
 import os
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -13,14 +7,10 @@ TIMEZONE_ARG = timezone(timedelta(hours=-3))
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
 
-
 def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
-    """
-    Encuentra la carpeta del servidor de forma inteligente.
-    Busca en múltiples ubicaciones comunes.
-    """
     ubicaciones_a_verificar = [
         f"/workspaces/{os.environ.get('CODESPACE_NAME', 'unknown')}/{nombre_carpeta}",
+        None,
         os.path.join(os.getcwd(), nombre_carpeta),
         os.path.join(os.path.dirname(os.getcwd()), nombre_carpeta),
         os.path.expanduser(f"~/{nombre_carpeta}"),
@@ -28,7 +18,7 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     
     for ubicacion in ubicaciones_a_verificar:
         if ubicacion and os.path.exists(ubicacion) and os.path.isdir(ubicacion):
-            utils.logger.info(f"Carpeta del servidor encontrada en: {ubicacion}")
+            utils.logger.info(f"Carpeta del servidor encontrada en {ubicacion}")
             return ubicacion
     
     try:
@@ -36,19 +26,44 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
             for item in os.listdir("/workspaces"):
                 ruta_posible = os.path.join("/workspaces", item, nombre_carpeta)
                 if os.path.exists(ruta_posible) and os.path.isdir(ruta_posible):
-                    utils.logger.info(f"Carpeta del servidor encontrada en: {ruta_posible}")
+                    utils.logger.info(f"Carpeta del servidor encontrada en {ruta_posible}")
                     return ruta_posible
     except:
         pass
     
-    utils.logger.error(f"No se pudo encontrar la carpeta '{nombre_carpeta}'")
+    utils.logger.error(f"No se pudo encontrar la carpeta {nombre_carpeta}")
     return None
 
+def verificar_y_crear_carpeta_mega(ruta_carpeta):
+    try:
+        cmd_ls = ["mega-ls", ruta_carpeta]
+        result = subprocess.run(cmd_ls, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            utils.logger.info(f"Carpeta {ruta_carpeta} ya existe en MEGA")
+            return True
+        else:
+            utils.logger.info(f"Carpeta {ruta_carpeta} no existe, creando...")
+            
+            cmd_mkdir = ["mega-mkdir", "-p", ruta_carpeta]
+            result_mkdir = subprocess.run(cmd_mkdir, capture_output=True, text=True, timeout=10)
+            
+            if result_mkdir.returncode == 0:
+                utils.logger.info(f"Carpeta {ruta_carpeta} creada exitosamente")
+                utils.print_msg(f"Carpeta {ruta_carpeta} creada en MEGA", "📁")
+                return True
+            else:
+                utils.logger.error(f"Error creando carpeta: {result_mkdir.stderr}")
+                return False
+                
+    except subprocess.TimeoutExpired:
+        utils.logger.error("Timeout verificando carpeta en MEGA")
+        return False
+    except Exception as e:
+        utils.logger.error(f"Error verificando carpeta en MEGA: {e}")
+        return False
 
 def listar_carpetas_mega(ruta="/"):
-    """
-    Lista las carpetas disponibles en MEGA en la ruta especificada.
-    """
     try:
         cmd = ["mega-ls", ruta]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
@@ -59,14 +74,13 @@ def listar_carpetas_mega(ruta="/"):
         
         carpetas = []
         lineas = result.stdout.strip().split('\n')
-        
         for linea in lineas:
             nombre = linea.strip()
-            if nombre and nombre != '..' and nombre != '.':
+            if nombre and nombre != ".." and nombre != ".":
                 carpetas.append(nombre)
         
         return carpetas
-    
+        
     except subprocess.TimeoutExpired:
         utils.print_error("Tiempo de espera agotado al consultar MEGA")
         return None
@@ -74,19 +88,15 @@ def listar_carpetas_mega(ruta="/"):
         utils.logger.error(f"Error listando carpetas MEGA: {e}")
         return None
 
-
 def navegar_carpetas_mega(ruta_inicial="/"):
-    """
-    Permite navegar por las carpetas de MEGA de forma interactiva.
-    """
     ruta_actual = ruta_inicial
     
     while True:
         utils.limpiar_pantalla()
-        print("\n" + "=" * 60)
+        print("─" * 60)
         print("SELECCIONAR CARPETA EN MEGA")
-        print("=" * 60)
-        print(f"📂 {ruta_actual}\n")
+        print("─" * 60)
+        print(f"📁 {ruta_actual}")
         
         carpetas = listar_carpetas_mega(ruta_actual)
         
@@ -96,16 +106,16 @@ def navegar_carpetas_mega(ruta_inicial="/"):
             return None
         
         if not carpetas:
-            print("(Carpeta vacía)\n")
+            print("Carpeta vacía")
         else:
             for i, carpeta in enumerate(carpetas, 1):
-                print(f" {i}. 📁 {carpeta}")
+                print(f" {i}. {carpeta}")
         
-        print("\n" + "-" * 60)
-        print("[número] Entrar | [0] Subir | [s] Seleccionar | [c] Cancelar")
-        print("-" * 60)
+        print("─" * 60)
+        print("número = Entrar | 0 = Subir | s = Seleccionar | c = Cancelar")
+        print("─" * 60)
         
-        opcion = input("\n> ").strip().lower()
+        opcion = input("→ ").strip().lower()
         
         if opcion == 'c':
             return None
@@ -132,12 +142,138 @@ def navegar_carpetas_mega(ruta_inicial="/"):
                 utils.print_warning("Opción inválida")
                 utils.pausar()
 
+def ejecutar_backup_manual():
+    utils.limpiar_pantalla()
+    print("─" * 60)
+    print("CREAR BACKUP EN MEGA")
+    print("─" * 60)
+    
+    utils.logger.info("========== INICIO BACKUP MANUAL ==========")
+    
+    try:
+        if not utils.verificar_megacmd():
+            utils.print_error("MegaCMD no está disponible")
+            utils.pausar()
+            return
+        
+        server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
+        server_folder = encontrar_carpeta_servidor(server_folder_config)
+        backup_folder = config.CONFIG.get("backup_folder", "/backups")
+        backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
+        
+        utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
+        utils.logger.info(f"Configuración - BASEDIR: {config.BASEDIR}")
+        utils.logger.info(f"Configuración - os.getcwd(): {os.getcwd()}")
+        utils.logger.info(f"Configuración - parent de BASEDIR: {os.path.dirname(config.BASEDIR)}")
+        utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
+        utils.logger.info(f"Configuración - Existe?: {os.path.exists(server_folder) if server_folder else False}")
+        utils.logger.info(f"Configuración - Destino: {backup_folder}")
+        
+        if not server_folder or not os.path.exists(server_folder):
+            utils.print_error(f"La carpeta {server_folder_config} no se pudo encontrar")
+            utils.logger.error(f"Carpeta {server_folder_config} no encontrada")
+            utils.pausar()
+            return
+        
+        print(f"📁 {server_folder}")
+        print(f"📦 Calculando tamaño...")
+        
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(server_folder):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    total_size += os.path.getsize(filepath)
+                except:
+                    pass
+        
+        size_mb = total_size / (1024 * 1024)
+        print(f"📦 {size_mb:.1f} MB\n")
+        
+        if not utils.confirmar("¿Crear backup?"):
+            print("Cancelado")
+            utils.logger.info("Backup cancelado por usuario")
+            utils.pausar()
+            return
+        
+        print()
+        
+        if not verificar_y_crear_carpeta_mega(backup_folder):
+            utils.print_error("No se pudo verificar/crear carpeta en MEGA")
+            utils.pausar()
+            return
+        
+        timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
+        backup_name = f"{backup_prefix}_{timestamp}.zip"
+        
+        utils.logger.info(f"Nombre de backup: {backup_name}")
+        utils.logger.info("Iniciando compresión...")
+        
+        cmd = ["zip", "-r", "-q", backup_name, server_folder]
+        proceso = subprocess.Popen(cmd)
+        
+        spinner = utils.Spinner("Comprimiendo")
+        if not spinner.start(proceso, check_file=backup_name):
+            utils.print_error("Error al comprimir")
+            utils.logger.error("Fallo en compresión")
+            utils.pausar()
+            return
+        
+        if not os.path.exists(backup_name):
+            utils.print_error("El archivo ZIP no se creó")
+            utils.logger.error(f"Archivo {backup_name} no encontrado")
+            utils.pausar()
+            return
+        
+        backup_size = os.path.getsize(backup_name)
+        backup_size_mb = backup_size / (1024 * 1024)
+        utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
+        
+        print(f"\n✓ {backup_name} ({backup_size_mb:.1f} MB)\n")
+        
+        utils.logger.info("Iniciando subida a MEGA...")
+        
+        cmd_upload = ["mega-put", backup_name, backup_folder]
+        proceso_upload = subprocess.Popen(cmd_upload, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        spinner_upload = utils.Spinner("Subiendo a MEGA")
+        if not spinner_upload.start(proceso_upload):
+            utils.print_error("Error al subir a MEGA")
+            utils.logger.error("Fallo en subida a MEGA")
+            try:
+                os.remove(backup_name)
+                utils.logger.info("Archivo local eliminado tras error")
+            except:
+                pass
+            utils.pausar()
+            return
+        
+        utils.logger.info(f"Backup subido exitosamente a {backup_folder}/{backup_name}")
+        
+        try:
+            os.remove(backup_name)
+            utils.logger.info("Archivo local eliminado")
+        except Exception as e:
+            utils.print_warning(f"No se pudo eliminar archivo local: {e}")
+            utils.logger.warning(f"Error eliminando archivo local: {e}")
+        
+        print()
+        utils.print_msg(f"Backup creado exitosamente: {backup_name}")
+        utils.logger.info("========== FIN BACKUP MANUAL ==========")
+        
+        print()
+        if utils.confirmar("¿Limpiar backups antiguos?"):
+            limpiar_backups_antiguos()
+    
+    except Exception as e:
+        utils.print_error(f"Error: {e}")
+        utils.logger.error(f"Error en crear_backup: {e}")
+        import traceback
+        utils.logger.error(traceback.format_exc())
+    
+    utils.pausar()
 
 def ejecutar_backup_automatico():
-    """
-    Ejecuta un backup automático sin interacción del usuario.
-    Esta función es llamada por el sistema de autobackup.
-    """
     utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
     
     try:
@@ -151,18 +287,21 @@ def ejecutar_backup_automatico():
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
         
         utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
-        utils.logger.info(f"Configuración - BASE_DIR: {config.BASE_DIR}")
+        utils.logger.info(f"Configuración - BASEDIR: {config.BASEDIR}")
         utils.logger.info(f"Configuración - os.getcwd(): {os.getcwd()}")
-        utils.logger.info(f"Configuración - parent de BASE_DIR: {os.path.dirname(config.BASE_DIR)}")
+        utils.logger.info(f"Configuración - parent de BASEDIR: {os.path.dirname(config.BASEDIR)}")
         utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
-        utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder) if server_folder else False}")
+        utils.logger.info(f"Configuración - Existe?: {os.path.exists(server_folder) if server_folder else False}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
         
         if not server_folder or not os.path.exists(server_folder):
             utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
             return
         
-        # Calcular tamaño
+        if not verificar_y_crear_carpeta_mega(backup_folder):
+            utils.logger.error("No se pudo verificar/crear carpeta en MEGA")
+            return
+        
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(server_folder):
             for filename in filenames:
@@ -175,14 +314,12 @@ def ejecutar_backup_automatico():
         size_mb = total_size / (1024 * 1024)
         utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
         
-        # Crear backup
         timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         
         utils.logger.info(f"Nombre de backup: {backup_name}")
         utils.logger.info("Iniciando compresión...")
         
-        # Compresión con salida redirigida
         cmd = ["zip", "-r", "-q", backup_name, server_folder]
         proceso = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
@@ -194,8 +331,8 @@ def ejecutar_backup_automatico():
         backup_size_mb = backup_size / (1024 * 1024)
         utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
         
-        # Subida a MEGA con salida redirigida (sin barra de progreso)
         utils.logger.info("Iniciando subida a MEGA...")
+        
         cmd_upload = ["mega-put", "-q", backup_name, backup_folder]
         proceso_upload = subprocess.run(cmd_upload, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
@@ -209,7 +346,6 @@ def ejecutar_backup_automatico():
         
         utils.logger.info(f"Backup automático subido exitosamente: {backup_folder}/{backup_name}")
         
-        # Limpiar archivo local
         try:
             os.remove(backup_name)
             utils.logger.info("Archivo local eliminado")
@@ -217,15 +353,11 @@ def ejecutar_backup_automatico():
             utils.logger.warning(f"No se pudo eliminar archivo local: {e}")
         
         utils.logger.info("========== FIN BACKUP AUTOMÁTICO ==========")
-        
+    
     except Exception as e:
         utils.logger.error(f"Error en backup automático: {str(e)}")
 
-
 def limpiar_backups_antiguos():
-    """
-    Elimina backups antiguos manteniendo solo los más recientes.
-    """
     try:
         max_backups = config.CONFIG.get("max_backups", 5)
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
@@ -247,7 +379,6 @@ def limpiar_backups_antiguos():
         utils.logger.info(f"Backups encontrados: {len(archivos)}")
         
         if len(archivos) <= max_backups:
-            utils.logger.info("No hay backups para eliminar")
             return
         
         a_eliminar = archivos[max_backups:]
@@ -258,13 +389,10 @@ def limpiar_backups_antiguos():
             
             if result_rm.returncode == 0:
                 utils.logger.info(f"Eliminado: {archivo}")
-                utils.print_msg(f"Eliminado: {archivo}")
             else:
-                utils.logger.warning(f"Error eliminando {archivo}")
+                utils.logger.warning(f"Error eliminando: {archivo}")
         
         utils.logger.info(f"Limpieza completada - {len(a_eliminar)} backups eliminados")
-        utils.print_msg(f"Se eliminaron {len(a_eliminar)} backups antiguos")
-        
+    
     except Exception as e:
         utils.logger.error(f"Error en limpiar_backups_antiguos: {e}")
-        utils.print_error(f"Error limpiando backups: {e}")
