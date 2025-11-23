@@ -36,25 +36,29 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
 
 def verificar_y_crear_carpeta_mega(ruta_carpeta):
     try:
-        cmd_ls = ["mega-ls", ruta_carpeta]
+        cmd_ls = ["mega-ls", "-l", ruta_carpeta]
         result = subprocess.run(cmd_ls, capture_output=True, text=True, timeout=10)
         
         if result.returncode == 0:
-            utils.logger.info(f"Carpeta {ruta_carpeta} ya existe en MEGA")
-            return True
-        else:
-            utils.logger.info(f"Carpeta {ruta_carpeta} no existe, creando...")
-            
-            cmd_mkdir = ["mega-mkdir", ruta_carpeta]
-            result_mkdir = subprocess.run(cmd_mkdir, capture_output=True, text=True, timeout=10)
-            
-            if result_mkdir.returncode == 0:
-                utils.logger.info(f"Carpeta {ruta_carpeta} creada exitosamente")
-                utils.print_msg(f"Carpeta {ruta_carpeta} creada en MEGA", "📁")
+            if result.stdout.startswith('d'):
+                utils.logger.info(f"Carpeta {ruta_carpeta} ya existe")
                 return True
             else:
-                utils.logger.error(f"Error creando carpeta: {result_mkdir.stderr}")
-                return False
+                utils.logger.warning(f"{ruta_carpeta} existe como archivo, eliminando...")
+                cmd_rm = ["mega-rm", ruta_carpeta]
+                subprocess.run(cmd_rm, capture_output=True, text=True, timeout=10)
+        
+        utils.logger.info(f"Creando carpeta {ruta_carpeta}...")
+        
+        cmd_mkdir = ["mega-mkdir", ruta_carpeta]
+        result_mkdir = subprocess.run(cmd_mkdir, capture_output=True, text=True, timeout=10)
+        
+        if result_mkdir.returncode == 0:
+            utils.logger.info(f"Carpeta {ruta_carpeta} creada exitosamente")
+            return True
+        
+        utils.logger.error(f"Error: {result_mkdir.stderr}")
+        return False
                 
     except subprocess.TimeoutExpired:
         utils.logger.error("Timeout verificando carpeta en MEGA")
