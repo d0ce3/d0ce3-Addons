@@ -111,6 +111,61 @@ def install():
         utils.print_msg("Error en la instalación", "✖")
         return False
 
+def verificar_y_crear_carpeta_mega(ruta_carpeta):
+    """
+    Verifica si una carpeta existe en MEGA y la crea si no existe.
+    Si existe un archivo con ese nombre, lo elimina y crea la carpeta.
+    
+    Args:
+        ruta_carpeta: Ruta de la carpeta en MEGA (ej: "/backups")
+    
+    Returns:
+        True si la carpeta existe o fue creada exitosamente, False en caso de error
+    """
+    try:
+        # Verificar si el elemento existe y qué tipo es
+        cmd_ls = ["mega-ls", "-l", ruta_carpeta]
+        result = subprocess.run(cmd_ls, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            # El elemento existe
+            output = result.stdout.strip()
+            
+            if output.startswith('d'):
+                # Es una carpeta, todo bien
+                utils.logger.info(f"Carpeta {ruta_carpeta} ya existe")
+                return True
+            else:
+                # Es un archivo, eliminarlo
+                utils.logger.warning(f"{ruta_carpeta} existe como archivo, eliminando...")
+                cmd_rm = ["mega-rm", ruta_carpeta]
+                result_rm = subprocess.run(cmd_rm, capture_output=True, text=True, timeout=10)
+                
+                if result_rm.returncode != 0:
+                    utils.logger.error(f"Error al eliminar archivo: {result_rm.stderr}")
+                    return False
+        
+        # Si llegamos aquí, necesitamos crear la carpeta
+        # (o no existe, o era un archivo que ya eliminamos)
+        utils.logger.info(f"Creando carpeta {ruta_carpeta}...")
+        
+        cmd_mkdir = ["mega-mkdir", ruta_carpeta]
+        result_mkdir = subprocess.run(cmd_mkdir, capture_output=True, text=True, timeout=10)
+        
+        if result_mkdir.returncode == 0:
+            utils.logger.info(f"Carpeta {ruta_carpeta} creada exitosamente")
+            return True
+        else:
+            utils.logger.error(f"Error al crear carpeta: {result_mkdir.stderr}")
+            return False
+                
+    except subprocess.TimeoutExpired:
+        utils.logger.error(f"Timeout verificando carpeta {ruta_carpeta} en MEGA")
+        return False
+    except Exception as e:
+        utils.logger.error(f"Error verificando carpeta {ruta_carpeta} en MEGA: {e}")
+        return False
+
 def login():
     if is_logged_in():
         try:
@@ -141,14 +196,13 @@ def login():
         if result.returncode == 0:
             utils.print_msg("Sesión iniciada correctamente", "✓")
             
+            # Configurar carpeta de backups usando la función mejorada
             print("📁 Configurando carpeta de backups...")
-            subprocess.run(["mega-rm", "/backups"], capture_output=True, text=True, timeout=10)
-            result_mkdir = subprocess.run(["mega-mkdir", "/backups"], capture_output=True, text=True, timeout=10)
             
-            if result_mkdir.returncode == 0:
-                utils.print_msg("Carpeta /backups creada", "📁")
+            if verificar_y_crear_carpeta_mega("/backups"):
+                utils.print_msg("Carpeta /backups lista", "📁")
             else:
-                utils.logger.warning(f"No se pudo crear carpeta: {result_mkdir.stderr}")
+                utils.logger.warning("No se pudo configurar carpeta /backups completamente")
             
             import time
             time.sleep(1)

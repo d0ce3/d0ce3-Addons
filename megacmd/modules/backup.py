@@ -6,6 +6,7 @@ TIMEZONE_ARG = timezone(timedelta(hours=-3))
 
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
+megacmd = CloudModuleLoader.load_module("megacmd")
 
 def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     ubicaciones_a_verificar = [
@@ -33,39 +34,6 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     
     utils.logger.error(f"No se pudo encontrar la carpeta {nombre_carpeta}")
     return None
-
-def verificar_y_crear_carpeta_mega(ruta_carpeta):
-    try:
-        cmd_ls = ["mega-ls", "-l", ruta_carpeta]
-        result = subprocess.run(cmd_ls, capture_output=True, text=True, timeout=10)
-        
-        if result.returncode == 0:
-            if result.stdout.startswith('d'):
-                utils.logger.info(f"Carpeta {ruta_carpeta} ya existe")
-                return True
-            else:
-                utils.logger.warning(f"{ruta_carpeta} existe como archivo, eliminando...")
-                cmd_rm = ["mega-rm", ruta_carpeta]
-                subprocess.run(cmd_rm, capture_output=True, text=True, timeout=10)
-        
-        utils.logger.info(f"Creando carpeta {ruta_carpeta}...")
-        
-        cmd_mkdir = ["mega-mkdir", ruta_carpeta]
-        result_mkdir = subprocess.run(cmd_mkdir, capture_output=True, text=True, timeout=10)
-        
-        if result_mkdir.returncode == 0:
-            utils.logger.info(f"Carpeta {ruta_carpeta} creada exitosamente")
-            return True
-        
-        utils.logger.error(f"Error: {result_mkdir.stderr}")
-        return False
-                
-    except subprocess.TimeoutExpired:
-        utils.logger.error("Timeout verificando carpeta en MEGA")
-        return False
-    except Exception as e:
-        utils.logger.error(f"Error verificando carpeta en MEGA: {e}")
-        return False
 
 def listar_carpetas_mega(ruta="/"):
     try:
@@ -202,7 +170,8 @@ def ejecutar_backup_manual():
         
         print()
         
-        if not verificar_y_crear_carpeta_mega(backup_folder):
+        # Verificar y crear carpeta usando la función del módulo megacmd
+        if not megacmd.verificar_y_crear_carpeta_mega(backup_folder):
             utils.print_error("No se pudo verificar/crear carpeta en MEGA")
             utils.pausar()
             return
@@ -302,7 +271,8 @@ def ejecutar_backup_automatico():
             utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
             return
         
-        if not verificar_y_crear_carpeta_mega(backup_folder):
+        # Verificar y crear carpeta usando la función del módulo megacmd
+        if not megacmd.verificar_y_crear_carpeta_mega(backup_folder):
             utils.logger.error("No se pudo verificar/crear carpeta en MEGA")
             return
         
