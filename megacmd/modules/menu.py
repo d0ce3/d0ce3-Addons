@@ -117,6 +117,7 @@ class InputHandler:
                     return 'x'
                 
                 numero = int(valor)
+                
                 if max_val is not None:
                     if min_val <= numero <= max_val:
                         return numero
@@ -126,6 +127,7 @@ class InputHandler:
                     return numero
                 else:
                     Display.warning(f"Número mayor o igual a {min_val}")
+            
             except ValueError:
                 if permitir_x:
                     Display.warning("Ingrese número válido o 'x' para cancelar")
@@ -142,8 +144,8 @@ class InputHandler:
             print(Tema.m(" x. Volver"))
         print()
         return InputHandler.seleccionar_numero(
-            "Opción", 
-            min_val=0 if not tiene_volver else 1, 
+            "Opción",
+            min_val=0 if not tiene_volver else 1,
             max_val=len(opciones),
             permitir_x=tiene_volver
         )
@@ -168,98 +170,14 @@ class MenuBackup:
         self.autobackup = autobackup
     
     def crear_backup_manual(self):
-        Display.clear()
-        Display.header("CREAR BACKUP")
-        
         try:
-            self._ejecutar_backup_manual()
+            self.backup.ejecutar_backup_manual()
         except Exception as e:
             Display.error(f"Error: {e}")
             self.utils.logger.error(f"Error en crear_backup: {e}")
             import traceback
             self.utils.logger.error(traceback.format_exc())
-        
-        InputHandler.pausar()
-    
-    def _ejecutar_backup_manual(self):
-        self.utils.logger.info("========== INICIO BACKUP MANUAL ==========")
-        
-        if not self.utils.verificar_megacmd():
-            Display.error("MegaCMD no disponible")
-            return
-        
-        server_folder_config = self.config.CONFIG.get("server_folder", "servidor_minecraft")
-        server_folder = self.backup.encontrar_carpeta_servidor(server_folder_config)
-        backup_folder = self.config.CONFIG.get("backup_folder", "/backups")
-        backup_prefix = self.config.CONFIG.get("backup_prefix", "MSX")
-        
-        if not server_folder or not os.path.exists(server_folder):
-            Display.error(f"Carpeta {server_folder_config} no encontrada")
-            self.utils.logger.error(f"Carpeta {server_folder_config} no encontrada")
-            return
-        
-        print(f"{Tema.FOLDER} {server_folder}")
-        print(f"{Tema.PACKAGE} Calculando tamaño...")
-        
-        total_size = 0
-        for dirpath, dirnames, filenames in os.walk(server_folder):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
-                try:
-                    total_size += os.path.getsize(filepath)
-                except:
-                    pass
-        
-        size_mb = total_size / (1024 * 1024)
-        print(f"{Tema.PACKAGE} {size_mb:.1f} MB\n")
-        
-        if not InputHandler.confirmar("¿Crear backup?"):
-            print("Cancelado")
-            return
-        
-        print()
-        timestamp = datetime.now(self.backup.TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
-        backup_name = f"{backup_prefix}_{timestamp}.zip"
-        
-        cmd = ["zip", "-r", "-q", backup_name, server_folder]
-        proceso = subprocess.Popen(cmd)
-        
-        spinner = self.utils.Spinner("Comprimiendo")
-        if not spinner.start(proceso, check_file=backup_name):
-            Display.error("Error al comprimir")
-            return
-        
-        if not os.path.exists(backup_name):
-            Display.error("ZIP no creado")
-            return
-        
-        backup_size_mb = os.path.getsize(backup_name) / (1024 * 1024)
-        print(f"\n{Tema.CHECK} {backup_name} ({backup_size_mb:.1f} MB)\n")
-        
-        cmd_upload = ["mega-put", backup_name, backup_folder]
-        proceso_upload = subprocess.Popen(cmd_upload, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        spinner_upload = self.utils.Spinner("Subiendo a MEGA")
-        if not spinner_upload.start(proceso_upload):
-            Display.error("Error al subir")
-            try:
-                os.remove(backup_name)
-            except:
-                pass
-            return
-        
-        try:
-            os.remove(backup_name)
-        except Exception as e:
-            Display.warning(f"No se pudo eliminar local: {e}")
-        
-        print()
-        Display.msg(f"Backup creado: {backup_name}")
-        self.utils.logger.info("========== FIN BACKUP MANUAL ==========")
-        
-        print()
-        if InputHandler.confirmar("¿Limpiar backups antiguos?"):
-            self.backup.limpiar_backups_antiguos()
+            InputHandler.pausar()
     
     def configurar_autobackup(self):
         if not self.utils.verificar_megacmd():
@@ -285,11 +203,11 @@ class MenuBackup:
                 estado_color = Tema.rojo(estado_texto)
             
             print(Tema.m("┌" + "─" * 48 + "┐"))
-            print(Tema.m(f"│ Estado:    {estado_color}                    │"))
+            print(Tema.m(f"│ Estado: {estado_color}"))
             print(Tema.m(f"│ Intervalo: {Tema.blanco(f'{intervalo_actual} min'):<38} │"))
-            print(Tema.m(f"│ Carpeta:   {Tema.blanco(server_folder):<38} │"))
-            print(Tema.m(f"│ Destino:   {Tema.blanco(backup_folder):<38} │"))
-            print(Tema.m(f"│ Máximo:    {Tema.blanco(f'{max_backups} backups'):<38} │"))
+            print(Tema.m(f"│ Carpeta: {Tema.blanco(server_folder):<38} │"))
+            print(Tema.m(f"│ Destino: {Tema.blanco(backup_folder):<38} │"))
+            print(Tema.m(f"│ Máximo: {Tema.blanco(f'{max_backups} backups'):<38} │"))
             print(Tema.m("└" + "─" * 48 + "┘"))
             print()
             
@@ -365,6 +283,7 @@ class MenuBackup:
                 self.utils.logger.info(f"Destino: {nueva_ruta}")
             else:
                 print("Cancelado")
+        
         elif opcion == 2:
             nuevo_destino = InputHandler.input_texto("Nueva carpeta (ej: /backups)", requerido=False)
             if nuevo_destino:
@@ -440,7 +359,6 @@ class MenuArchivos:
                 carpetas = [self.config.CONFIG.get("backup_folder", "/backups")]
             
             Display.lista_archivos(carpetas)
-            
             opcion = input(Tema.m("\nCarpeta (0=raíz): ")).strip()
             
             if opcion == '0':
@@ -499,7 +417,6 @@ class MenuArchivos:
                     print(Tema.m(f"│ {nombre_completo:<34} │"))
             
             print(Tema.m("└" + "─" * 10 + "┴" + "─" * 14 + "┴" + "─" * 10 + "┘"))
-            
             print()
             
             seleccion = InputHandler.seleccionar_numero(
@@ -517,6 +434,7 @@ class MenuArchivos:
             print(f"\n📥 {archivo_seleccionado}")
             
             full_ruta = f"{ruta}/{archivo_seleccionado}".replace('//', '/')
+            
             cmd_get = ["mega-get", full_ruta, "."]
             proceso = subprocess.Popen(cmd_get, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
@@ -562,7 +480,7 @@ class MenuArchivos:
                 Display.error("No se pudo listar")
                 return
             
-            archivos = [line.strip() for line in result.stdout.split('\n') 
+            archivos = [line.strip() for line in result.stdout.split('\n')
                        if backup_prefix in line and '.zip' in line]
             archivos.sort(reverse=True)
             
@@ -591,7 +509,6 @@ class MenuArchivos:
                     print(Tema.m(f"│ {archivo:<34} │"))
             
             print(Tema.m("└" + "─" * 10 + "┴" + "─" * 14 + "┴" + "─" * 10 + "┘"))
-            
             print()
             
             opciones = [
@@ -674,7 +591,6 @@ class MenuArchivos:
             
             size = os.path.getsize(archivo)
             size_mb = size / (1024 * 1024)
-            
             backup_folder = self.config.CONFIG.get("backup_folder", "/backups")
             
             print(f"\n{Tema.FILE} {os.path.basename(archivo)}")
@@ -687,7 +603,7 @@ class MenuArchivos:
             
             print()
             
-            cmd_put = ["mega-put", archivo, backup_folder]
+            cmd_put = ["mega-put", "-c", archivo, backup_folder]
             proceso = subprocess.Popen(cmd_put, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             spinner = self.utils.Spinner("Subiendo")
