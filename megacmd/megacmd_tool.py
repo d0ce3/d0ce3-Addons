@@ -25,7 +25,8 @@ def ensure_requests():
     except ImportError:
         import subprocess
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "requests"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "requests"], 
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except:
             subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
         import requests
@@ -36,7 +37,7 @@ requests = ensure_requests()
 class ConfigManager:
     _config = None
     _last_check = 0
-
+    
     @staticmethod
     def load(force=False):
         if not force and ConfigManager._config and (time.time() - ConfigManager._last_check) < 300:
@@ -51,12 +52,12 @@ class ConfigManager:
             return ConfigManager._config
         except Exception:
             return ConfigManager._config
-
+    
     @staticmethod
     def get_package_url():
         config = ConfigManager.load()
         return config.get("package") if config else None
-
+    
     @staticmethod
     def get_remote_version():
         config = ConfigManager.load()
@@ -66,7 +67,7 @@ class PackageManager:
     @staticmethod
     def is_installed():
         return os.path.exists(PACKAGE_DIR) and len(os.listdir(PACKAGE_DIR)) > 0
-
+    
     @staticmethod
     def download_and_extract():
         try:
@@ -94,7 +95,7 @@ class PackageManager:
             return True
         except Exception:
             return False
-
+    
     @staticmethod
     def ensure_installed():
         return True if PackageManager.is_installed() else PackageManager.download_and_extract()
@@ -107,17 +108,17 @@ class AutobackupManager:
         try:
             with open(AUTOBACKUP_FLAG_FILE, 'r') as f:
                 data = json.load(f)
-                init_time = data.get('init_time', 0)
-                if time.time() - init_time > 7200:
+            init_time = data.get('init_time', 0)
+            if time.time() - init_time > 7200:
+                return False
+            pid = data.get('pid', 0)
+            if pid != os.getpid():
+                try:
+                    os.kill(pid, 0)
+                    return True
+                except (OSError, ProcessLookupError):
                     return False
-                pid = data.get('pid', 0)
-                if pid != os.getpid():
-                    try:
-                        os.kill(pid, 0)
-                        return True
-                    except (OSError, ProcessLookupError):
-                        return False
-                return True
+            return True
         except:
             return False
     
@@ -142,7 +143,7 @@ class AutobackupManager:
 
 class ModuleLoader:
     _cache = {}
-
+    
     @staticmethod
     def load_module(module_name):
         if module_name in ModuleLoader._cache:
@@ -174,31 +175,19 @@ class ModuleLoader:
         except Exception as e:
             print(f"⚠ Error cargando módulo {module_name}: {e}")
             return None
-
+    
     @staticmethod
     def reload_all():
-        print("\n" + "="*60)
-        print("🔄 ACTUALIZANDO DESDE GITHUB PAGES")
-        print("="*60 + "\n")
         remote_version = ConfigManager.get_remote_version()
         if remote_version:
-            print(f"🔌 Versión local: {VERSION}")
-            print(f"🔌 Versión remota: {remote_version}")
-            print("✓ Ya estás en la última versión" if remote_version == VERSION else "⚠ Hay una nueva versión disponible")
-            print()
-        print("🧹 Limpiando cache de módulos...")
+            print(f"🔌 Versión local: {VERSION} | Versión remota: {remote_version}")
         ModuleLoader._cache.clear()
-        for key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger']:
+        for key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger', 'menu']:
             if key in sys.modules:
                 del sys.modules[key]
-                print(f" ✓ {key} limpiado")
-        print("\n📥 Descargando paquete actualizado...")
         success = PackageManager.download_and_extract()
         if success:
             AutobackupManager.clear_flag()
-        print("="*60)
-        print("✅ ACTUALIZACIÓN COMPLETADA" if success else "❌ ERROR EN ACTUALIZACIÓN")
-        print("="*60)
         return success
 
 CloudModuleLoader = ModuleLoader
@@ -209,14 +198,27 @@ def call_module_function(module_name, function_name):
         getattr(module, function_name)()
     else:
         print(f"❌ Error: función {function_name} no disponible")
-        print("💡 Intentá actualizar los módulos")
         input("\n[+] Enter para continuar...")
 
-ejecutar_backup_manual = lambda: call_module_function("backup", "ejecutar_backup_manual")
+def get_menu_instances():
+    config = ModuleLoader.load_module("config")
+    utils = ModuleLoader.load_module("utils")
+    backup = ModuleLoader.load_module("backup")
+    autobackup = ModuleLoader.load_module("autobackup")
+    menu = ModuleLoader.load_module("menu")
+    
+    if not all([config, utils, backup, autobackup, menu]):
+        return None, None
+    
+    menu_backup = menu.MenuBackup(config, utils, backup, autobackup)
+    menu_archivos = menu.MenuArchivos(config, utils, backup, autobackup)
+    return menu_backup, menu_archivos
+
+ejecutar_backup_manual = lambda: (lambda m: m[0].crear_backup_manual() if m[0] else call_module_function("files", "ejecutar_backup_manual"))(get_menu_instances())
 listar_y_descargar_mega = lambda: call_module_function("files", "listar_y_descargar")
 gestionar_backups_mega = lambda: call_module_function("files", "gestionar_backups")
 subir_archivo_mega = lambda: call_module_function("files", "subir_archivo")
-configurar_autobackup = lambda: call_module_function("backup", "configurar_autobackup")
+configurar_autobackup = lambda: (lambda m: m[0].configurar_autobackup() if m[0] else call_module_function("files", "configurar_autobackup"))(get_menu_instances())
 info_cuenta_mega = lambda: call_module_function("files", "info_cuenta")
 toggle_autobackup = configurar_autobackup
 
@@ -224,32 +226,25 @@ def actualizar_modulos():
     print("\n" + "="*60)
     print("🔄 ACTUALIZAR MÓDULOS")
     print("="*60 + "\n")
-    print("Esto descargará la última versión de todos los módulos")
-    print("desde GitHub Pages y limpiará el cache local.\n")
     if input("¿Continuar con la actualización? (s/n): ").strip().lower() == 's':
         success = ModuleLoader.reload_all()
-        print("\n✅ Módulos actualizados correctamente" if success else "\n❌ Hubo un error durante la actualización")
-        print("💡 Todas las funciones ahora usan la última versión" if success else "💡 Verificá tu conexión a internet")
+        print("\n✅ Actualizado" if success else "\n❌ Error en actualización")
     else:
-        print("\n❌ Actualización cancelada\n" + "="*60 + "\n")
-    input("Presioná Enter para continuar...")
+        print("\n❌ Cancelado")
+    input("Enter para continuar...")
 
 def init():
     ConfigManager.load()
     if not PackageManager.ensure_installed():
         return
-    
     config = ModuleLoader.load_module("config")
     if not config:
         return
-    
     logger_mod = ModuleLoader.load_module("logger")
     if logger_mod and config.CONFIG.get("debug_enabled", False):
         logger_mod.logger_manager.enable_debug()
-    
     if AutobackupManager.is_initialized():
         return
-    
     autobackup = ModuleLoader.load_module("autobackup")
     if autobackup and hasattr(autobackup, 'init_on_load'):
         try:
