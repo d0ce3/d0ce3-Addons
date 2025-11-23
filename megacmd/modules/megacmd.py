@@ -140,15 +140,21 @@ def login():
         
         if result.returncode == 0:
             utils.print_msg("Sesión iniciada correctamente", "✓")
+            import time
+            time.sleep(1)
+            utils.limpiar_pantalla()
             return True
         else:
             utils.print_msg(f"Error al iniciar sesión: {result.stderr}", "✖")
+            utils.pausar()
             return False
     except subprocess.TimeoutExpired:
         utils.print_msg("Tiempo de espera agotado", "✖")
+        utils.pausar()
         return False
     except Exception as e:
         utils.print_msg(f"Error: {e}", "✖")
+        utils.pausar()
         return False
 
 def ensure_ready():
