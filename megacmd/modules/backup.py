@@ -1,6 +1,9 @@
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+TIMEZONE_ARG = timezone(timedelta(hours=-3))
+
 
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
@@ -174,7 +177,7 @@ def ejecutar_backup_manual():
             return
 
         print()
-        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
+        timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
 
         utils.logger.info(f"Nombre de backup: {backup_name}")
@@ -274,7 +277,7 @@ def ejecutar_backup_automatico():
         size_mb = total_size / (1024 * 1024)
         utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
 
-        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
+        timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         utils.logger.info(f"Nombre de backup: {backup_name}")
         utils.logger.info("Iniciando compresión...")

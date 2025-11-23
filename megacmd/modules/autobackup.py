@@ -3,7 +3,7 @@ import os
 import subprocess
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
@@ -11,6 +11,9 @@ utils = CloudModuleLoader.load_module("utils")
 backup_timer = None
 backup_timer_created_at = None
 TIMER_LOCK_FILE = os.path.expanduser("~/.megacmd_timer_lock")
+
+# Zona horaria de Argentina (UTC-3)
+TIMEZONE_ARG = timezone(timedelta(hours=-3))
 
 class TimerManager:
     """Gestiona el estado del timer de manera persistente"""
@@ -55,7 +58,7 @@ class TimerManager:
                     'pid': os.getpid(),
                     'last_activity': time.time(),
                     'interval_minutes': interval_minutes,
-                    'created_at': datetime.now().isoformat()
+                    'created_at': datetime.now(TIMEZONE_ARG).isoformat()
                 }, f)
             return True
         except:
@@ -166,6 +169,14 @@ def ejecutar_backup_automatico():
         
         utils.print_msg("INICIANDO BACKUP AUTOMÁTICO")
         
+        # Enviar mensaje al servidor Minecraft
+        try:
+            rcon = CloudModuleLoader.load_module("rcon")
+            if rcon and hasattr(rcon, 'enviar_comando'):
+                rcon.enviar_comando("say [BACKUP] Iniciando backup automático...")
+        except Exception as e:
+            utils.logger.warning(f"No se pudo enviar mensaje RCON de inicio: {e}")
+        
         server_folder_config = config.CONFIG.get("server_folder", "servidor_minecraft")
         server_folder = encontrar_carpeta_servidor(server_folder_config)
         backup_folder = config.CONFIG.get("backup_folder", "/backups")
@@ -182,6 +193,15 @@ def ejecutar_backup_automatico():
         if not server_folder or not os.path.exists(server_folder):
             utils.print_error(f"La carpeta {server_folder_config} no existe, se cancela backup automático")
             utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
+            
+            # Enviar mensaje de error al servidor
+            try:
+                rcon = CloudModuleLoader.load_module("rcon")
+                if rcon and hasattr(rcon, 'enviar_comando'):
+                    rcon.enviar_comando("say [BACKUP] ERROR: No se pudo encontrar la carpeta del servidor")
+            except Exception:
+                pass
+            
             return
         
         utils.print_msg("Calculando tamaño de carpeta...")
@@ -198,7 +218,8 @@ def ejecutar_backup_automatico():
         utils.print_msg(f"Tamaño total: {size_mb:.1f} MB")
         utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
         
-        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
+        # USAR TIMEZONE DE ARGENTINA
+        timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         utils.print_msg(f"Archivo a crear: {backup_name}")
         utils.logger.info(f"Nombre de backup: {backup_name}")
@@ -213,6 +234,15 @@ def ejecutar_backup_automatico():
         if not os.path.exists(backup_name):
             utils.print_error("Error al crear archivo ZIP")
             utils.logger.error("Error durante compresión automática")
+            
+            # Enviar mensaje de error al servidor
+            try:
+                rcon = CloudModuleLoader.load_module("rcon")
+                if rcon and hasattr(rcon, 'enviar_comando'):
+                    rcon.enviar_comando("say [BACKUP] ERROR: Fallo al crear archivo ZIP")
+            except Exception:
+                pass
+            
             return
         
         backup_size_mb = os.path.getsize(backup_name) / (1024 * 1024)
@@ -229,6 +259,15 @@ def ejecutar_backup_automatico():
         if proceso_upload.returncode != 0:
             utils.print_error("Error al subir backup a MEGA")
             utils.logger.error("Error al subir backup automático a MEGA")
+            
+            # Enviar mensaje de error al servidor
+            try:
+                rcon = CloudModuleLoader.load_module("rcon")
+                if rcon and hasattr(rcon, 'enviar_comando'):
+                    rcon.enviar_comando("say [BACKUP] ERROR: Fallo al subir a MEGA")
+            except Exception:
+                pass
+            
             try:
                 os.remove(backup_name)
             except Exception:
@@ -254,6 +293,15 @@ def ejecutar_backup_automatico():
             utils.logger.warning("No se pudo importar limpiar_backups_antiguos desde backup.py")
         
         utils.print_msg("Backup automático completado")
+        
+        # Enviar mensaje de éxito al servidor Minecraft
+        try:
+            rcon = CloudModuleLoader.load_module("rcon")
+            if rcon and hasattr(rcon, 'enviar_comando'):
+                rcon.enviar_comando("say [BACKUP] Backup completado exitosamente")
+        except Exception as e:
+            utils.logger.warning(f"No se pudo enviar mensaje RCON de fin: {e}")
+        
         utils.logger.info("========== FIN BACKUP AUTOMÁTICO ==========")
         
     except Exception as e:
@@ -261,6 +309,14 @@ def ejecutar_backup_automatico():
         utils.logger.error(f"Error en backup automático: {str(e)}")
         import traceback
         utils.logger.error(traceback.format_exc())
+        
+        # Enviar mensaje de error al servidor
+        try:
+            rcon = CloudModuleLoader.load_module("rcon")
+            if rcon and hasattr(rcon, 'enviar_comando'):
+                rcon.enviar_comando("say [BACKUP] ERROR: Fallo en el backup automático")
+        except Exception:
+            pass
 
 def start_autobackup(interval_minutes=None):
     """Inicia el timer de autobackup"""
@@ -280,7 +336,7 @@ def start_autobackup(interval_minutes=None):
         utils.logger.info("Timer local de autobackup ya activo, no se crea uno nuevo")
         return
     
-    now = datetime.now()
+    now = datetime.now(TIMEZONE_ARG)
     backup_timer_created_at = now
     
     def timer_callback():
@@ -443,19 +499,19 @@ def configurar_autobackup():
             print("💡 Recomendado: 5 backups")
             while True:
                 try:
-                    nuevo_max = input("   Nueva cantidad máxima (1-20): ").strip()
+                    nuevo_max = input("   Nueva cantidad máxima (1-10): ").strip()
                     if not nuevo_max:
                         break
                     
                     nuevo_max = int(nuevo_max)
-                    if 1 <= nuevo_max <= 20:
+                    if 1 <= nuevo_max <= 10:
                         config.CONFIG["max_backups"] = nuevo_max
                         config.guardar_config()
                         utils.print_msg(f"Máximo de backups cambiado a {nuevo_max}")
                         utils.logger.info(f"Máximo de backups cambiado a {nuevo_max}")
                         break
                     else:
-                        utils.print_warning("Cantidad debe estar entre 1 y 20")
+                        utils.print_warning("Cantidad debe estar entre 1 y 10")
                 except ValueError:
                     utils.print_warning("Ingrese un número válido")
                 except KeyboardInterrupt:
