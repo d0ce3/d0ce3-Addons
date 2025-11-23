@@ -274,7 +274,14 @@ def init():
                 import traceback
                 logger_mod.error(traceback.format_exc())
 
-init()
+@atexit.register
+def debug_paths():
+    print(f"\n[DEBUG] BASE_DIR: {BASE_DIR}")
+    print(f"[DEBUG] CACHE_DIR: {CACHE_DIR}")
+    print(f"[DEBUG] PACKAGE_DIR: {PACKAGE_DIR}")
+    print(f"[DEBUG] ¿Existe CACHE_DIR?: {os.path.exists(CACHE_DIR)}")
+    if os.path.exists(PACKAGE_DIR):
+        print(f"[DEBUG] Módulos en PACKAGE_DIR: {os.listdir(PACKAGE_DIR)}")
 
 @atexit.register
 def cleanup_on_exit():
@@ -285,3 +292,5 @@ def cleanup_on_exit():
                     AutobackupManager.clear_flag()
     except:
         pass
+
+init()
