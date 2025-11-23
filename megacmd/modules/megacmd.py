@@ -140,6 +140,16 @@ def login():
         
         if result.returncode == 0:
             utils.print_msg("Sesión iniciada correctamente", "✓")
+            
+            print("📁 Configurando carpeta de backups...")
+            subprocess.run(["mega-rm", "/backups"], capture_output=True, text=True, timeout=10)
+            result_mkdir = subprocess.run(["mega-mkdir", "/backups"], capture_output=True, text=True, timeout=10)
+            
+            if result_mkdir.returncode == 0:
+                utils.print_msg("Carpeta /backups creada", "📁")
+            else:
+                utils.logger.warning(f"No se pudo crear carpeta: {result_mkdir.stderr}")
+            
             import time
             time.sleep(1)
             utils.limpiar_pantalla()
