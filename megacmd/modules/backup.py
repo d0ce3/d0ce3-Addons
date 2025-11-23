@@ -45,7 +45,7 @@ def verificar_y_crear_carpeta_mega(ruta_carpeta):
         else:
             utils.logger.info(f"Carpeta {ruta_carpeta} no existe, creando...")
             
-            cmd_mkdir = ["mega-mkdir", "-p", ruta_carpeta]
+            cmd_mkdir = ["mega-mkdir", ruta_carpeta]
             result_mkdir = subprocess.run(cmd_mkdir, capture_output=True, text=True, timeout=10)
             
             if result_mkdir.returncode == 0:
