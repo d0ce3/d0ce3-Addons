@@ -324,7 +324,7 @@ def start_autobackup(interval_minutes=None):
     
     # Obtener intervalo de configuración si no se especifica
     if interval_minutes is None:
-        interval_minutes = config.CONFIG.get("backup_interval_minutes", 3)
+        interval_minutes = config.CONFIG.get("backup_interval_minutes", 30)
     
     # Verificar si ya hay un timer activo (incluso de otra instancia)
     if TimerManager.is_timer_active():

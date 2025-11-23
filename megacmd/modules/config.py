@@ -22,7 +22,7 @@ DEFAULT_CONFIG = {
     "backup_folder": "/backups",
     "server_folder": "servidor_minecraft",
     "max_backups": 5,
-    "backup_interval_minutes": 5,
+    "backup_interval_minutes": 30,
     "backup_prefix": "MSX",
     "autobackup_enabled": False,
     "debug_enabled": False
