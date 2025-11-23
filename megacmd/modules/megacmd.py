@@ -1,7 +1,3 @@
-"""
-Gestión de MegaCmd
-"""
-
 import subprocess
 from shutil import which
 

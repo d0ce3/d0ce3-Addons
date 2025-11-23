@@ -9,10 +9,8 @@ if getattr(sys, 'frozen', False):
 else:
     # Modo desarrollo
     try:
-        # SCRIPT_BASE_DIR es inyectado por ModuleLoader
         BASE_DIR = SCRIPT_BASE_DIR
     except NameError:
-        # Fallback: intentar calcular desde __file__
         try:
             module_dir = os.path.dirname(os.path.abspath(__file__))
             if module_dir.endswith(os.path.join("__megacmd_cache__", "modules")):
@@ -21,13 +19,11 @@ else:
             else:
                 BASE_DIR = module_dir
         except NameError:
-            # Último fallback
             BASE_DIR = os.getcwd()
 
 # Log para debug
 print(f"[CONFIG DEBUG] BASE_DIR establecido en: {BASE_DIR}", file=sys.stderr)
-
-# Configuración por defecto
+# ============================================
 DEFAULT_CONFIG = {
     "backup_folder": "/backups",
     "server_folder": "servidor_minecraft",
@@ -80,5 +76,4 @@ def set(key, value):
     CONFIG[key] = value
     guardar_config()
 
-# Cargar configuración al importar
 CONFIG = cargar_config()
