@@ -1,3 +1,8 @@
+"""
+Módulo de Menús e Interfaz de Usuario
+Sistema centralizado de menús para MegaCMD Backup Tool
+"""
+
 import os
 import subprocess
 from datetime import datetime
@@ -5,6 +10,9 @@ from datetime import datetime
 class Tema:
     MORADO = "\033[95m"
     MORADO_CLARO = "\033[35m"
+    VERDE = "\033[92m"
+    ROJO = "\033[91m"
+    BLANCO = "\033[97m"
     RESET = "\033[0m"
     BOLD = "\033[1m"
     
@@ -30,6 +38,18 @@ class Tema:
     @staticmethod
     def mb(texto):
         return f"{Tema.BOLD}{Tema.MORADO}{texto}{Tema.RESET}"
+    
+    @staticmethod
+    def verde(texto):
+        return f"{Tema.VERDE}{texto}{Tema.RESET}"
+    
+    @staticmethod
+    def rojo(texto):
+        return f"{Tema.ROJO}{texto}{Tema.RESET}"
+    
+    @staticmethod
+    def blanco(texto):
+        return f"{Tema.BLANCO}{texto}{Tema.RESET}"
 
 class Display:
     @staticmethod
@@ -257,12 +277,20 @@ class MenuBackup:
             server_folder = self.config.CONFIG.get("server_folder", "servidor_minecraft")
             max_backups = self.config.CONFIG.get("max_backups", 5)
             
-            estado = f"{Tema.CHECK} ACTIVADO" if autobackup_enabled else f"{Tema.ERROR} DESACTIVADO"
-            print(Tema.m(f"Estado: {estado}"))
-            print(Tema.m(f"Intervalo: {intervalo_actual} min"))
-            print(Tema.m(f"Carpeta: {server_folder}"))
-            print(Tema.m(f"Destino: {backup_folder}"))
-            print(Tema.m(f"Máximo: {max_backups} backups"))
+            if autobackup_enabled:
+                estado_texto = f"{Tema.CHECK} ACTIVADO"
+                estado_color = Tema.verde(estado_texto)
+            else:
+                estado_texto = f"{Tema.ERROR} DESACTIVADO"
+                estado_color = Tema.rojo(estado_texto)
+            
+            print(Tema.m("┌" + "─" * 48 + "┐"))
+            print(Tema.m(f"│ Estado:    {estado_color:<23} │"))
+            print(Tema.m(f"│ Intervalo: {Tema.blanco(f'{intervalo_actual} min'):<31} │"))
+            print(Tema.m(f"│ Carpeta:   {Tema.blanco(server_folder):<31} │"))
+            print(Tema.m(f"│ Destino:   {Tema.blanco(backup_folder):<31} │"))
+            print(Tema.m(f"│ Máximo:    {Tema.blanco(f'{max_backups} backups'):<31} │"))
+            print(Tema.m("└" + "─" * 48 + "┘"))
             print()
             
             opciones = []
@@ -518,12 +546,33 @@ class MenuArchivos:
                 Display.warning("No hay backups")
                 return
             
-            print(Tema.m(f"Total: {len(archivos)}\n"))
-            Display.lista_archivos(archivos)
+            print(Tema.m(f"Total: {len(archivos)} backups\n"))
+            
+            print(Tema.m("┌" + "─" * 48 + "┐"))
+            for archivo in archivos:
+                try:
+                    nombre_sin_ext = archivo.replace('.zip', '')
+                    partes = nombre_sin_ext.split('_')
+                    if len(partes) >= 3:
+                        prefijo = partes[0]
+                        fecha = partes[1]
+                        hora = partes[2].replace('-', ':')
+                        
+                        fecha_formateada = fecha.replace('-', '/')
+                        linea = f"│ {prefijo:<6} {fecha_formateada:<12} {hora:<8} │"
+                    else:
+                        linea = f"│ {archivo:<44} │"
+                except:
+                    linea = f"│ {archivo:<44} │"
+                
+                print(Tema.m(linea))
+            print(Tema.m("└" + "─" * 48 + "┘"))
+            
+            print()
             
             opciones = [
                 "Eliminar backup",
-                "Limpiar antiguos",
+                "Limpiar backups antiguos",
                 "Info cuenta"
             ]
             
@@ -672,7 +721,6 @@ class MenuArchivos:
             self.utils.logger.error(f"Error: {e}")
         finally:
             self._resume_autobackup(was_enabled)
-            InputHandler.pausar()
     
     def _descomprimir_backup(self, archivo):
         try:
