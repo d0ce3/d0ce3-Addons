@@ -246,7 +246,7 @@ def ejecutar_backup_automatico():
     logger_mod.log_backup_auto_inicio()
     
     print("\n" + "="*60)
-    print("⏱️  INICIANDO BACKUP AUTOMÁTICO")
+    print("| INICIANDO BACKUP AUTOMÁTICO")
     print("="*60)
     
     try:
@@ -270,7 +270,7 @@ def ejecutar_backup_automatico():
         if not server_folder or not os.path.exists(server_folder):
             error_msg = f"Carpeta {server_folder_config} no encontrada"
             utils.logger.error(error_msg)
-            print(f"❌ {error_msg}")
+            print(f"| ERROR: {error_msg}")
             logger_mod.log_backup_auto_error(error_msg)
             
             try:
@@ -282,7 +282,7 @@ def ejecutar_backup_automatico():
             
             return
         
-        print("📊 Calculando tamaño de carpeta...")
+        print("| Calculando tamaño de carpeta...")
         
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(server_folder):
@@ -294,14 +294,14 @@ def ejecutar_backup_automatico():
                     pass
         
         size_mb = total_size / (1024 * 1024)
-        print(f"📦 Tamaño total: {size_mb:.1f} MB")
+        print(f"| Tamaño total: {size_mb:.1f} MB")
         utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
         
         timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         
-        print(f"📄 Archivo a crear: {backup_name}")
-        print("🗜️  Comprimiendo...")
+        print(f"| Archivo a crear: {backup_name}")
+        print("| Comprimiendo...")
         utils.logger.info(f"Nombre de backup: {backup_name}")
         utils.logger.info("Iniciando compresión...")
         
@@ -311,7 +311,7 @@ def ejecutar_backup_automatico():
         if proceso.returncode != 0 or not os.path.exists(backup_name):
             error_msg = "Error durante compresión automática"
             utils.logger.error(error_msg)
-            print(f"❌ {error_msg}")
+            print(f"| ERROR: {error_msg}")
             logger_mod.log_backup_auto_error(error_msg)
             
             try:
@@ -325,18 +325,18 @@ def ejecutar_backup_automatico():
         
         backup_size = os.path.getsize(backup_name)
         backup_size_mb = backup_size / (1024 * 1024)
-        print(f"✓ Comprimido: {backup_size_mb:.1f} MB")
+        print(f"| Comprimido: {backup_size_mb:.1f} MB")
         utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
         
-        print(f"☁️  Subiendo a MEGA ({backup_folder})...")
+        print(f"| Subiendo a MEGA ({backup_folder})...")
         utils.logger.info("Iniciando subida a MEGA...")
         
-        result = megacmd.upload_file(backup_name, backup_folder, silent=True)
+        result = megacmd.upload_file(backup_name, backup_folder, silent=False)
         
         if result.returncode != 0:
             error_msg = "Error al subir backup automático a MEGA"
             utils.logger.error(error_msg)
-            print(f"❌ {error_msg}")
+            print(f"| ERROR: {error_msg}")
             logger_mod.log_backup_auto_error(error_msg)
             
             try:
@@ -352,16 +352,14 @@ def ejecutar_backup_automatico():
                 pass
             return
         
-        print(f"✓ Subido exitosamente a {backup_folder}/{backup_name}")
+        print(f"| Subido exitosamente a {backup_folder}/{backup_name}")
         utils.logger.info(f"Backup automático subido exitosamente: {backup_folder}/{backup_name}")
         logger_mod.log_backup_auto_exito(backup_name, backup_size_mb)
         
         try:
             os.remove(backup_name)
-            print("🗑️  Archivo temporal eliminado")
             utils.logger.info("Archivo local eliminado")
         except Exception as e:
-            print(f"⚠️  No se pudo eliminar archivo temporal: {e}")
             utils.logger.warning(f"No se pudo eliminar archivo local: {e}")
         
         print("="*60 + "\n")
@@ -369,7 +367,7 @@ def ejecutar_backup_automatico():
     except Exception as e:
         error_msg = f"Error en backup automático: {str(e)}"
         utils.logger.error(error_msg)
-        print(f"❌ {error_msg}")
+        print(f"| ERROR: {error_msg}")
         
         try:
             logger_mod.log_backup_auto_error(error_msg)
