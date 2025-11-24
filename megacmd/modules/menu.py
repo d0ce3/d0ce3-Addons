@@ -254,9 +254,20 @@ class MenuBackup:
         )
         
         if nuevo_intervalo:
+            autobackup_estaba_activo = self.config.CONFIG.get("autobackup_enabled", False)
+            
+            if autobackup_estaba_activo:
+                print(f"\n{Tema.INFO} Reiniciando timer con nuevo intervalo...")
+                self.autobackup.stop_autobackup()
+            
             self.config.set("backup_interval_minutes", nuevo_intervalo)
             Display.msg(f"Intervalo: {nuevo_intervalo} min")
-            self.utils.logger.info(f"Intervalo: {nuevo_intervalo} min")
+            self.utils.logger.info(f"Intervalo cambiado a {nuevo_intervalo} min")
+            
+            if autobackup_estaba_activo:
+                self.autobackup.start_autobackup()
+                Display.msg("Timer reiniciado correctamente")
+                self.utils.logger.info("Timer reiniciado con nuevo intervalo")
         
         InputHandler.pausar()
     
