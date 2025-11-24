@@ -1,8 +1,3 @@
-"""
-Módulo de Menús e Interfaz de Usuario
-Sistema centralizado de menús para MegaCMD Backup Tool
-"""
-
 import os
 import subprocess
 from datetime import datetime
@@ -168,6 +163,7 @@ class MenuBackup:
         self.utils = utils
         self.backup = backup
         self.autobackup = autobackup
+        self.megacmd = CloudModuleLoader.load_module("megacmd")
     
     def crear_backup_manual(self):
         try:
@@ -318,6 +314,7 @@ class MenuArchivos:
         self.utils = utils
         self.backup = backup
         self.autobackup = autobackup
+        self.megacmd = CloudModuleLoader.load_module("megacmd")
     
     def _pause_autobackup(self):
         if self.autobackup.is_enabled():
@@ -342,8 +339,7 @@ class MenuArchivos:
             
             print(f"{Tema.FOLDER} Carpetas en MEGA:\n")
             
-            cmd_ls_root = ["mega-ls", "-l"]
-            result_root = subprocess.run(cmd_ls_root, capture_output=True, text=True)
+            result_root = self.megacmd.list_files("/", detailed=True)
             
             if result_root.returncode != 0:
                 Display.error("No se pudo listar MEGA")
@@ -372,8 +368,7 @@ class MenuArchivos:
             
             print(f"\n{Tema.FOLDER} {ruta}\n")
             
-            cmd_ls = ["mega-ls", "-l", ruta]
-            result = subprocess.run(cmd_ls, capture_output=True, text=True)
+            result = self.megacmd.list_files(ruta, detailed=True)
             
             if result.returncode != 0:
                 Display.error("No se pudo listar")
@@ -435,11 +430,9 @@ class MenuArchivos:
             
             full_ruta = f"{ruta}/{archivo_seleccionado}".replace('//', '/')
             
-            cmd_get = ["mega-get", full_ruta, "."]
-            proceso = subprocess.Popen(cmd_get, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = self.megacmd.download_file(full_ruta, ".")
             
-            spinner = self.utils.Spinner("Descargando")
-            if not spinner.start(proceso):
+            if result.returncode != 0:
                 Display.error("Error al descargar")
                 return
             
@@ -473,8 +466,7 @@ class MenuArchivos:
             
             print(f"{Tema.FOLDER} {backup_folder}\n")
             
-            cmd = ["mega-ls", backup_folder]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = self.megacmd.list_files(backup_folder)
             
             if result.returncode != 0:
                 Display.error("No se pudo listar")
@@ -552,8 +544,7 @@ class MenuArchivos:
         archivo_eliminar = archivos[num - 1]
         
         if InputHandler.confirmar(f"¿Eliminar {archivo_eliminar}?"):
-            cmd_rm = ["mega-rm", f"{backup_folder}/{archivo_eliminar}"]
-            result_rm = subprocess.run(cmd_rm, capture_output=True, text=True)
+            result_rm = self.megacmd.remove_file(f"{backup_folder}/{archivo_eliminar}")
             
             if result_rm.returncode == 0:
                 Display.msg(f"Eliminado: {archivo_eliminar}")
@@ -603,11 +594,9 @@ class MenuArchivos:
             
             print()
             
-            cmd_put = ["mega-put", "-c", archivo, backup_folder]
-            proceso = subprocess.Popen(cmd_put, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = self.megacmd.upload_file(archivo, backup_folder, silent=False)
             
-            spinner = self.utils.Spinner("Subiendo")
-            if not spinner.start(proceso):
+            if result.returncode != 0:
                 Display.error("Error al subir")
                 self.utils.logger.error(f"Error subiendo {archivo}")
                 return
@@ -633,15 +622,12 @@ class MenuArchivos:
                 Display.error("MegaCMD no disponible")
                 return
             
-            cmd_whoami = ["mega-whoami"]
-            result_whoami = subprocess.run(cmd_whoami, capture_output=True, text=True)
+            email = self.megacmd.get_account_email()
             
-            if result_whoami.returncode == 0:
-                email = result_whoami.stdout.strip()
+            if email:
                 print(f"{Tema.EMAIL} {email}\n")
             
-            cmd_quota = ["mega-df", "-h"]
-            result_quota = subprocess.run(cmd_quota, capture_output=True, text=True)
+            result_quota = self.megacmd.get_quota()
             
             if result_quota.returncode == 0:
                 print(f"{Tema.DISK} Espacio:\n")
@@ -650,8 +636,7 @@ class MenuArchivos:
             backup_folder = self.config.CONFIG.get("backup_folder", "/backups")
             print(f"\n{Tema.FOLDER} Backups en {backup_folder}:")
             
-            cmd_ls = ["mega-ls", backup_folder]
-            result_ls = subprocess.run(cmd_ls, capture_output=True, text=True)
+            result_ls = self.megacmd.list_files(backup_folder)
             
             if result_ls.returncode == 0:
                 archivos = [line for line in result_ls.stdout.split('\n') if '.zip' in line]

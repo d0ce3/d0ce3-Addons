@@ -6,6 +6,7 @@ TIMEZONE_ARG = timezone(timedelta(hours=-3))
 
 config = CloudModuleLoader.load_module("config")
 utils = CloudModuleLoader.load_module("utils")
+megacmd = CloudModuleLoader.load_module("megacmd")
 
 def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     ubicaciones_a_verificar = [
@@ -36,8 +37,7 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
 
 def listar_carpetas_mega(ruta="/"):
     try:
-        cmd = ["mega-ls", ruta]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        result = megacmd.list_files(ruta)
         
         if result.returncode != 0:
             utils.logger.error(f"Error listando carpetas en MEGA: {result.stderr}")
@@ -52,9 +52,6 @@ def listar_carpetas_mega(ruta="/"):
         
         return carpetas
         
-    except subprocess.TimeoutExpired:
-        utils.print_error("Tiempo de espera agotado al consultar MEGA")
-        return None
     except Exception as e:
         utils.logger.error(f"Error listando carpetas MEGA: {e}")
         return None
@@ -201,8 +198,11 @@ def ejecutar_backup_manual():
         
         utils.logger.info("Iniciando subida a MEGA...")
         
-        cmd_upload = ["mega-put", "-c", backup_name, backup_folder]
-        proceso_upload = subprocess.Popen(cmd_upload, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proceso_upload = subprocess.Popen(
+            ["mega-put", "-c", backup_name, backup_folder + "/"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
         
         spinner_upload = utils.Spinner("Subiendo a MEGA")
         if not spinner_upload.start(proceso_upload):
@@ -297,10 +297,9 @@ def ejecutar_backup_automatico():
         
         utils.logger.info("Iniciando subida a MEGA...")
         
-        cmd_upload = ["mega-put", "-q", "-c", backup_name, backup_folder]
-        proceso_upload = subprocess.run(cmd_upload, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        result = megacmd.upload_file(backup_name, backup_folder, silent=True)
         
-        if proceso_upload.returncode != 0:
+        if result.returncode != 0:
             utils.logger.error("Error al subir backup automático a MEGA")
             try:
                 os.remove(backup_name)
@@ -329,8 +328,7 @@ def limpiar_backups_antiguos():
         
         utils.logger.info(f"Limpiando backups antiguos (mantener {max_backups})...")
         
-        cmd_list = ["mega-ls", backup_folder]
-        result = subprocess.run(cmd_list, capture_output=True, text=True)
+        result = megacmd.list_files(backup_folder)
         
         if result.returncode != 0:
             utils.logger.error("Error listando backups")
@@ -348,8 +346,7 @@ def limpiar_backups_antiguos():
         a_eliminar = archivos[max_backups:]
         
         for archivo in a_eliminar:
-            cmd_rm = ["mega-rm", f"{backup_folder}/{archivo}"]
-            result_rm = subprocess.run(cmd_rm, capture_output=True, text=True)
+            result_rm = megacmd.remove_file(f"{backup_folder}/{archivo}")
             
             if result_rm.returncode == 0:
                 utils.logger.info(f"Eliminado: {archivo}")

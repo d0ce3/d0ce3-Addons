@@ -111,19 +111,6 @@ def install():
         utils.print_msg("Error en la instalación", "✖")
         return False
 
-def carpeta_existe(ruta_carpeta):
-    try:
-        cmd_ls = ["mega-ls", "-l", ruta_carpeta]
-        result = subprocess.run(cmd_ls, capture_output=True, text=True, timeout=10)
-        
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            return output.startswith('d')
-        return False
-                
-    except:
-        return False
-
 def login():
     if is_logged_in():
         try:
@@ -153,9 +140,15 @@ def login():
         
         if result.returncode == 0:
             utils.print_msg("Sesión iniciada correctamente", "✓")
-            utils.logger.info("Login exitoso en MEGA")
             
-            print("📁 La carpeta de backups se creará automáticamente al subir el primer backup")
+            print("📁 Configurando carpeta de backups...")
+            subprocess.run(["mega-rm", "/backups"], capture_output=True, text=True, timeout=10)
+            result_mkdir = subprocess.run(["mega-mkdir", "/backups"], capture_output=True, text=True, timeout=10)
+            
+            if result_mkdir.returncode == 0:
+                utils.print_msg("Carpeta /backups creada", "📁")
+            else:
+                utils.logger.warning(f"No se pudo crear carpeta: {result_mkdir.stderr}")
             
             import time
             time.sleep(1)
@@ -180,3 +173,96 @@ def ensure_ready():
     if not login():
         return False
     return True
+
+def upload_file(local_file, remote_folder, silent=False):
+    if not remote_folder.endswith("/"):
+        remote_folder += "/"
+    
+    cmd = ["mega-put", "-c", local_file, remote_folder]
+    if silent:
+        cmd.insert(1, "-q")
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        utils.logger.info(f"Upload: {local_file} -> {remote_folder} (returncode: {result.returncode})")
+        return result
+    except subprocess.TimeoutExpired:
+        utils.logger.error(f"Timeout subiendo {local_file}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="Timeout")
+    except Exception as e:
+        utils.logger.error(f"Error subiendo {local_file}: {e}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr=str(e))
+
+def list_files(remote_folder="/", detailed=False):
+    cmd = ["mega-ls"]
+    if detailed:
+        cmd.append("-l")
+    cmd.append(remote_folder)
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return result
+    except subprocess.TimeoutExpired:
+        utils.logger.error(f"Timeout listando {remote_folder}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="Timeout")
+    except Exception as e:
+        utils.logger.error(f"Error listando {remote_folder}: {e}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr=str(e))
+
+def remove_file(remote_path):
+    cmd = ["mega-rm", remote_path]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            utils.logger.info(f"Eliminado: {remote_path}")
+        else:
+            utils.logger.warning(f"Error eliminando {remote_path}: {result.stderr}")
+        return result
+    except subprocess.TimeoutExpired:
+        utils.logger.error(f"Timeout eliminando {remote_path}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="Timeout")
+    except Exception as e:
+        utils.logger.error(f"Error eliminando {remote_path}: {e}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr=str(e))
+
+def download_file(remote_file, local_path="."):
+    cmd = ["mega-get", remote_file, local_path]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode == 0:
+            utils.logger.info(f"Descargado: {remote_file} -> {local_path}")
+        else:
+            utils.logger.error(f"Error descargando {remote_file}: {result.stderr}")
+        return result
+    except subprocess.TimeoutExpired:
+        utils.logger.error(f"Timeout descargando {remote_file}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="Timeout")
+    except Exception as e:
+        utils.logger.error(f"Error descargando {remote_file}: {e}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr=str(e))
+
+def get_quota():
+    cmd = ["mega-df", "-h"]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return result
+    except subprocess.TimeoutExpired:
+        utils.logger.error("Timeout obteniendo cuota")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="Timeout")
+    except Exception as e:
+        utils.logger.error(f"Error obteniendo cuota: {e}")
+        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr=str(e))
+
+def get_account_email():
+    cmd = ["mega-whoami"]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            return result.stdout.strip()
+        return None
+    except:
+        return None
