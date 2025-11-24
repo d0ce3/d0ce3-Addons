@@ -4,8 +4,6 @@ import logging
 from datetime import datetime
 
 class LoggerManager:
-    """Gestor centralizado de logging para todo el proyecto"""
-    
     _instance = None
     _logger = None
     _debug_enabled = False
@@ -22,7 +20,6 @@ class LoggerManager:
             self._setup_logger()
     
     def _setup_logger(self):
-        """Configura el logger principal"""
         self._logger = logging.getLogger('megacmd')
         self._logger.setLevel(logging.DEBUG)
         
@@ -69,15 +66,13 @@ class LoggerManager:
         self._console_handler.setFormatter(console_formatter)
     
     def enable_debug(self):
-        """Activa mensajes de debug en consola"""
         was_enabled = self._debug_enabled
         if not self._debug_enabled:
             self._debug_enabled = True
             if self._console_handler not in self._logger.handlers:
                 self._logger.addHandler(self._console_handler)
-
         if not was_enabled and self._debug_enabled:
-             self._logger.info("Modo debug activado en consola")
+            self._logger.info("Modo debug activado en consola")
     
     def disable_debug(self):
         was_enabled = self._debug_enabled
@@ -85,40 +80,31 @@ class LoggerManager:
             self._debug_enabled = False
             if self._console_handler in self._logger.handlers:
                 self._logger.removeHandler(self._console_handler)
-        
         if was_enabled and not self._debug_enabled:
             self._logger.info("Modo debug desactivado en consola")
-
+    
     def is_debug_enabled(self):
-        """Verifica si debug está activado"""
         return self._debug_enabled
     
     def get_log_file_path(self):
-        """Devuelve la ruta del archivo de log"""
         return self._log_file
     
     def info(self, msg):
-        """Log nivel INFO"""
         self._logger.info(msg)
     
     def warning(self, msg):
-        """Log nivel WARNING"""
         self._logger.warning(msg)
     
     def error(self, msg):
-        """Log nivel ERROR"""
         self._logger.error(msg)
     
     def debug(self, msg):
-        """Log nivel DEBUG"""
         self._logger.debug(msg)
     
     def exception(self, msg):
-        """Log con traceback completo"""
         self._logger.exception(msg)
     
     def download_logs(self, dest_path=None):
-        """Prepara los logs para descarga"""
         if dest_path is None:
             dest_path = f"megacmd_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         
@@ -134,7 +120,6 @@ class LoggerManager:
             return None
     
     def clear_logs(self):
-        """Limpia el archivo de logs"""
         try:
             if os.path.exists(self._log_file):
                 with open(self._log_file, 'w') as f:
@@ -146,18 +131,13 @@ class LoggerManager:
             return False
 
 logger_manager = LoggerManager()
-
 logger = logger_manager._logger
+
 info = logger_manager.info
 warning = logger_manager.warning
 error = logger_manager.error
 debug = logger_manager.debug
 exception = logger_manager.exception
-
-
-# ============================================================================
-# FUNCIONES DE LOGGING SIMPLIFICADAS PARA BACKUPS
-# ============================================================================
 
 def log_backup_inicio():
     logger_manager.info("========== INICIO BACKUP ==========")
@@ -170,6 +150,12 @@ def log_backup_auto_inicio():
 
 def log_backup_auto_fin():
     logger_manager.info("========== FIN BACKUP AUTOMÁTICO ==========")
+
+def log_backup_auto_exito(backup_name, size_mb):
+    logger_manager.info(f"Backup automático exitoso: {backup_name} ({size_mb:.1f} MB)")
+
+def log_backup_auto_error(error_msg):
+    logger_manager.error(f"Error en backup automático: {error_msg}")
 
 def log_config_carpeta(server_folder_config, base_dir, cwd, parent_dir, resolved, exists, destino):
     logger_manager.info(f"Configuración - Carpeta config: {server_folder_config}")
