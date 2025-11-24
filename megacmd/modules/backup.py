@@ -174,23 +174,28 @@ def ejecutar_backup_manual():
         utils.logger.info(f"Nombre de backup: {backup_name}")
         utils.logger.info("Iniciando compresión...")
         
-        cmd = ["zip", "-r", "-q", backup_name, server_folder]
-        proceso = subprocess.Popen(cmd)
+        parent_dir = os.path.dirname(server_folder)
+        folder_name = os.path.basename(server_folder)
+        
+        cmd = ["zip", "-r", "-q", backup_name, folder_name]
+        proceso = subprocess.Popen(cmd, cwd=parent_dir)
         
         spinner = utils.Spinner("Comprimiendo")
-        if not spinner.start(proceso, check_file=backup_name):
+        if not spinner.start(proceso, check_file=os.path.join(parent_dir, backup_name)):
             utils.print_error("Error al comprimir")
             utils.logger.error("Fallo en compresión")
             utils.pausar()
             return
         
-        if not os.path.exists(backup_name):
+        backup_path = os.path.join(parent_dir, backup_name)
+        
+        if not os.path.exists(backup_path):
             utils.print_error("El archivo ZIP no se creó")
             utils.logger.error(f"Archivo {backup_name} no encontrado")
             utils.pausar()
             return
         
-        backup_size = os.path.getsize(backup_name)
+        backup_size = os.path.getsize(backup_path)
         backup_size_mb = backup_size / (1024 * 1024)
         utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
         
@@ -201,7 +206,8 @@ def ejecutar_backup_manual():
         proceso_upload = subprocess.Popen(
             ["mega-put", "-c", backup_name, backup_folder + "/"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            cwd=parent_dir
         )
         
         spinner_upload = utils.Spinner("Subiendo a MEGA")
@@ -209,7 +215,7 @@ def ejecutar_backup_manual():
             utils.print_error("Error al subir a MEGA")
             utils.logger.error("Fallo en subida a MEGA")
             try:
-                os.remove(backup_name)
+                os.remove(backup_path)
                 utils.logger.info("Archivo local eliminado tras error")
             except:
                 pass
@@ -219,7 +225,7 @@ def ejecutar_backup_manual():
         utils.logger.info(f"Backup subido exitosamente a {backup_folder}/{backup_name}")
         
         try:
-            os.remove(backup_name)
+            os.remove(backup_path)
             utils.logger.info("Archivo local eliminado")
         except Exception as e:
             utils.print_warning(f"No se pudo eliminar archivo local: {e}")
@@ -305,10 +311,15 @@ def ejecutar_backup_automatico():
         utils.logger.info(f"Nombre de backup: {backup_name}")
         utils.logger.info("Iniciando compresión...")
         
-        cmd = ["zip", "-r", "-q", backup_name, server_folder]
-        proceso = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600)
+        parent_dir = os.path.dirname(server_folder)
+        folder_name = os.path.basename(server_folder)
         
-        if proceso.returncode != 0 or not os.path.exists(backup_name):
+        cmd = ["zip", "-r", "-q", backup_name, folder_name]
+        proceso = subprocess.run(cmd, cwd=parent_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600)
+        
+        backup_path = os.path.join(parent_dir, backup_name)
+        
+        if proceso.returncode != 0 or not os.path.exists(backup_path):
             error_msg = "Error durante compresión automática"
             utils.logger.error(error_msg)
             print(f"| ERROR: {error_msg}")
@@ -323,7 +334,7 @@ def ejecutar_backup_automatico():
             
             return
         
-        backup_size = os.path.getsize(backup_name)
+        backup_size = os.path.getsize(backup_path)
         backup_size_mb = backup_size / (1024 * 1024)
         print(f"| Comprimido: {backup_size_mb:.1f} MB")
         utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
@@ -331,7 +342,7 @@ def ejecutar_backup_automatico():
         print(f"| Subiendo a MEGA ({backup_folder})...")
         utils.logger.info("Iniciando subida a MEGA...")
         
-        result = megacmd.upload_file(backup_name, backup_folder, silent=False)
+        result = megacmd.upload_file(backup_path, backup_folder, silent=False)
         
         if result.returncode != 0:
             error_msg = "Error al subir backup automático a MEGA"
@@ -347,7 +358,7 @@ def ejecutar_backup_automatico():
                 pass
             
             try:
-                os.remove(backup_name)
+                os.remove(backup_path)
             except:
                 pass
             return
@@ -357,7 +368,7 @@ def ejecutar_backup_automatico():
         logger_mod.log_backup_auto_exito(backup_name, backup_size_mb)
         
         try:
-            os.remove(backup_name)
+            os.remove(backup_path)
             utils.logger.info("Archivo local eliminado")
         except Exception as e:
             utils.logger.warning(f"No se pudo eliminar archivo local: {e}")
