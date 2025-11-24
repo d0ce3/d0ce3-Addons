@@ -242,7 +242,12 @@ def ejecutar_backup_manual():
     utils.pausar()
 
 def ejecutar_backup_automatico():
-    utils.logger.info("========== INICIO BACKUP AUTOMÁTICO ==========")
+    logger_mod = CloudModuleLoader.load_module("logger")
+    logger_mod.log_backup_auto_inicio()
+    
+    print("\n" + "="*60)
+    print("⏱️  INICIANDO BACKUP AUTOMÁTICO")
+    print("="*60)
     
     try:
         if not config.CONFIG.get("autobackup_enabled", False):
@@ -263,8 +268,21 @@ def ejecutar_backup_automatico():
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
         
         if not server_folder or not os.path.exists(server_folder):
-            utils.logger.error(f"Carpeta {server_folder_config} no encontrada, se cancela backup automático")
+            error_msg = f"Carpeta {server_folder_config} no encontrada"
+            utils.logger.error(error_msg)
+            print(f"❌ {error_msg}")
+            logger_mod.log_backup_auto_error(error_msg)
+            
+            try:
+                rcon = CloudModuleLoader.load_module("rcon")
+                if rcon and rcon.is_connected():
+                    rcon.send_command(f"say [BACKUP ERROR] {error_msg}")
+            except:
+                pass
+            
             return
+        
+        print("📊 Calculando tamaño de carpeta...")
         
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(server_folder):
@@ -276,49 +294,94 @@ def ejecutar_backup_automatico():
                     pass
         
         size_mb = total_size / (1024 * 1024)
+        print(f"📦 Tamaño total: {size_mb:.1f} MB")
         utils.logger.info(f"Tamaño de carpeta: {size_mb:.1f} MB")
         
         timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         
+        print(f"📄 Archivo a crear: {backup_name}")
+        print("🗜️  Comprimiendo...")
         utils.logger.info(f"Nombre de backup: {backup_name}")
         utils.logger.info("Iniciando compresión...")
         
         cmd = ["zip", "-r", "-q", backup_name, server_folder]
-        proceso = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proceso = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600)
         
         if proceso.returncode != 0 or not os.path.exists(backup_name):
-            utils.logger.error("Error durante compresión automática")
+            error_msg = "Error durante compresión automática"
+            utils.logger.error(error_msg)
+            print(f"❌ {error_msg}")
+            logger_mod.log_backup_auto_error(error_msg)
+            
+            try:
+                rcon = CloudModuleLoader.load_module("rcon")
+                if rcon and rcon.is_connected():
+                    rcon.send_command(f"say [BACKUP ERROR] {error_msg}")
+            except:
+                pass
+            
             return
         
         backup_size = os.path.getsize(backup_name)
         backup_size_mb = backup_size / (1024 * 1024)
+        print(f"✓ Comprimido: {backup_size_mb:.1f} MB")
         utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
         
+        print(f"☁️  Subiendo a MEGA ({backup_folder})...")
         utils.logger.info("Iniciando subida a MEGA...")
         
         result = megacmd.upload_file(backup_name, backup_folder, silent=True)
         
         if result.returncode != 0:
-            utils.logger.error("Error al subir backup automático a MEGA")
+            error_msg = "Error al subir backup automático a MEGA"
+            utils.logger.error(error_msg)
+            print(f"❌ {error_msg}")
+            logger_mod.log_backup_auto_error(error_msg)
+            
+            try:
+                rcon = CloudModuleLoader.load_module("rcon")
+                if rcon and rcon.is_connected():
+                    rcon.send_command(f"say [BACKUP ERROR] {error_msg}")
+            except:
+                pass
+            
             try:
                 os.remove(backup_name)
             except:
                 pass
             return
         
+        print(f"✓ Subido exitosamente a {backup_folder}/{backup_name}")
         utils.logger.info(f"Backup automático subido exitosamente: {backup_folder}/{backup_name}")
+        logger_mod.log_backup_auto_exito(backup_name, backup_size_mb)
         
         try:
             os.remove(backup_name)
+            print("🗑️  Archivo temporal eliminado")
             utils.logger.info("Archivo local eliminado")
         except Exception as e:
+            print(f"⚠️  No se pudo eliminar archivo temporal: {e}")
             utils.logger.warning(f"No se pudo eliminar archivo local: {e}")
         
-        utils.logger.info("========== FIN BACKUP AUTOMÁTICO ==========")
-    
+        print("="*60 + "\n")
+        
     except Exception as e:
-        utils.logger.error(f"Error en backup automático: {str(e)}")
+        error_msg = f"Error en backup automático: {str(e)}"
+        utils.logger.error(error_msg)
+        print(f"❌ {error_msg}")
+        
+        try:
+            logger_mod.log_backup_auto_error(error_msg)
+        except:
+            pass
+        
+        try:
+            rcon = CloudModuleLoader.load_module("rcon")
+            if rcon and rcon.is_connected():
+                rcon.send_command(f"say [BACKUP ERROR] {error_msg}")
+        except:
+            pass
 
 def limpiar_backups_antiguos():
     try:
