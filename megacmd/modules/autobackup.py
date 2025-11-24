@@ -136,9 +136,9 @@ def ejecutar_backup_automatico():
         backup_prefix = config.CONFIG.get("backup_prefix", "MSX")
         
         utils.logger.info(f"Configuración - Carpeta config: {server_folder_config}")
-        utils.logger.info(f"Configuración - BASEDIR: {config.BASEDIR}")
+        utils.logger.info(f"Configuración - BASEDIR: {config.BASE_DIR}")
         utils.logger.info(f"Configuración - os.getcwd(): {os.getcwd()}")
-        utils.logger.info(f"Configuración - parent de BASEDIR: {os.path.dirname(config.BASEDIR)}")
+        utils.logger.info(f"Configuración - parent de BASEDIR: {os.path.dirname(config.BASE_DIR)}")
         utils.logger.info(f"Configuración - Carpeta resuelta: {server_folder}")
         utils.logger.info(f"Configuración - ¿Existe? {os.path.exists(server_folder) if server_folder else False}")
         utils.logger.info(f"Configuración - Destino: {backup_folder}")
