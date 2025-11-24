@@ -282,7 +282,7 @@ class MenuBackup:
         opcion = InputHandler.seleccionar_opcion(opciones)
         
         if opcion == 1:
-            print(f"\n🔍 Cargando...")
+            print(f"\n📁 Cargando...")
             nueva_ruta = self.backup.navegar_carpetas_mega(backup_folder)
             if nueva_ruta:
                 self.config.set("backup_folder", nueva_ruta)
@@ -441,18 +441,28 @@ class MenuArchivos:
             
             full_ruta = f"{ruta}/{archivo_seleccionado}".replace('//', '/')
             
-            result = self.megacmd.download_file(full_ruta, ".")
+            # FIX: Descargar en el directorio base del workspace, no en el directorio actual
+            # Obtener la ruta base del workspace (parent del BASE_DIR)
+            download_path = os.path.dirname(self.config.BASE_DIR)
+            
+            # Log para debug
+            self.utils.logger.info(f"Descargando a: {download_path}")
+            self.utils.logger.info(f"BASE_DIR: {self.config.BASE_DIR}")
+            
+            result = self.megacmd.download_file(full_ruta, download_path)
             
             if result.returncode != 0:
                 Display.error("Error al descargar")
                 return
             
             Display.msg(f"Descargado: {archivo_seleccionado}")
-            self.utils.logger.info(f"Descargado: {archivo_seleccionado}")
+            self.utils.logger.info(f"Descargado: {archivo_seleccionado} -> {download_path}")
             
             print()
             if InputHandler.confirmar("¿Descomprimir?"):
-                self._descomprimir_backup(archivo_seleccionado)
+                # Pasar la ruta completa del archivo descargado
+                archivo_descargado = os.path.join(download_path, archivo_seleccionado)
+                self._descomprimir_backup(archivo_descargado)
         
         except Exception as e:
             Display.error(f"Error: {e}")
