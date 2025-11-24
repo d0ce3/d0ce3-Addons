@@ -441,28 +441,20 @@ class MenuArchivos:
             
             full_ruta = f"{ruta}/{archivo_seleccionado}".replace('//', '/')
             
-            # FIX: Descargar en el directorio base del workspace, no en el directorio actual
-            # Obtener la ruta base del workspace (parent del BASE_DIR)
-            download_path = os.path.dirname(self.config.BASE_DIR)
-            
-            # Log para debug
-            self.utils.logger.info(f"Descargando a: {download_path}")
-            self.utils.logger.info(f"BASE_DIR: {self.config.BASE_DIR}")
-            
-            result = self.megacmd.download_file(full_ruta, download_path)
+            # Simplemente usar mega-get sin especificar destino
+            # Se descargará en el directorio actual (donde se ejecuta el script)
+            result = self.megacmd.download_file(full_ruta)
             
             if result.returncode != 0:
                 Display.error("Error al descargar")
                 return
             
             Display.msg(f"Descargado: {archivo_seleccionado}")
-            self.utils.logger.info(f"Descargado: {archivo_seleccionado} -> {download_path}")
+            self.utils.logger.info(f"Descargado: {archivo_seleccionado}")
             
             print()
             if InputHandler.confirmar("¿Descomprimir?"):
-                # Pasar la ruta completa del archivo descargado
-                archivo_descargado = os.path.join(download_path, archivo_seleccionado)
-                self._descomprimir_backup(archivo_descargado)
+                self._descomprimir_backup(archivo_seleccionado)
         
         except Exception as e:
             Display.error(f"Error: {e}")
