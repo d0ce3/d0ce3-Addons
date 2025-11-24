@@ -392,11 +392,11 @@ class MenuArchivos:
             
             print(Tema.m(f"Total: {len(archivos)} archivos\n"))
             
-            print(Tema.m("┌" + "─" * 10 + "┬" + "─" * 14 + "┬" + "─" * 10 + "┐"))
-            print(Tema.m(f"│ {'Nombre':<8} │ {'Fecha':<12} │ {'Hora':<8} │"))
-            print(Tema.m("├" + "─" * 10 + "┼" + "─" * 14 + "┼" + "─" * 10 + "┤"))
+            print(Tema.m("┌────┬──────────┬──────────────┬──────────┐"))
+            print(Tema.m(f"│ {'#':<2} │ {'Nombre':<8} │ {'Fecha':<12} │ {'Hora':<8} │"))
+            print(Tema.m("├────┼──────────┼──────────────┼──────────┤"))
             
-            for archivo in archivos:
+            for idx, archivo in enumerate(archivos, 1):
                 nombre_completo = archivo['nombre']
                 try:
                     nombre_sin_ext = nombre_completo.replace('.zip', '')
@@ -405,13 +405,13 @@ class MenuArchivos:
                         prefijo = partes[0]
                         fecha = partes[1].replace('-', '/')
                         hora = partes[2].replace('-', ':')
-                        print(Tema.m(f"│ {prefijo:<8} │ {fecha:<12} │ {hora:<8} │"))
+                        print(Tema.m(f"│ {idx:<2} │ {prefijo:<8} │ {fecha:<12} │ {hora:<8} │"))
                     else:
-                        print(Tema.m(f"│ {nombre_completo:<34} │"))
+                        print(Tema.m(f"│ {idx:<2} │ {nombre_completo:<32} │"))
                 except:
-                    print(Tema.m(f"│ {nombre_completo:<34} │"))
+                    print(Tema.m(f"│ {idx:<2} │ {nombre_completo:<32} │"))
             
-            print(Tema.m("└" + "─" * 10 + "┴" + "─" * 14 + "┴" + "─" * 10 + "┘"))
+            print(Tema.m("└────┴──────────┴──────────────┴──────────┘"))
             print()
             
             seleccion = InputHandler.seleccionar_numero(
@@ -482,9 +482,9 @@ class MenuArchivos:
             
             print(Tema.m(f"Total: {len(archivos)} backups\n"))
             
-            print(Tema.m("┌" + "─" * 10 + "┬" + "─" * 14 + "┬" + "─" * 10 + "┐"))
+            print(Tema.m("┌──────────┬──────────────┬──────────┐"))
             print(Tema.m(f"│ {'Nombre':<8} │ {'Fecha':<12} │ {'Hora':<8} │"))
-            print(Tema.m("├" + "─" * 10 + "┼" + "─" * 14 + "┼" + "─" * 10 + "┤"))
+            print(Tema.m("├──────────┼──────────────┼──────────┤"))
             
             for archivo in archivos:
                 try:
@@ -500,7 +500,7 @@ class MenuArchivos:
                 except:
                     print(Tema.m(f"│ {archivo:<34} │"))
             
-            print(Tema.m("└" + "─" * 10 + "┴" + "─" * 14 + "┴" + "─" * 10 + "┘"))
+            print(Tema.m("└──────────┴──────────────┴──────────┘"))
             print()
             
             opciones = [
