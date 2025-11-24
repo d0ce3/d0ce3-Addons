@@ -641,12 +641,18 @@ class MenuArchivos:
             if result_ls.returncode == 0:
                 archivos = [line for line in result_ls.stdout.split('\n') if '.zip' in line]
                 print(Tema.m(f" {len(archivos)} backups"))
+            
+            print("\n" + Tema.LINE)
+            if InputHandler.confirmar("\n¿Cerrar sesión en MEGA?"):
+                print()
+                self.megacmd.logout()
         
         except Exception as e:
             Display.error(f"Error: {e}")
             self.utils.logger.error(f"Error: {e}")
         finally:
             self._resume_autobackup(was_enabled)
+            InputHandler.pausar()
     
     def _descomprimir_backup(self, archivo):
         try:

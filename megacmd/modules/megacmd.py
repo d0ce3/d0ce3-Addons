@@ -167,6 +167,49 @@ def login():
         utils.pausar()
         return False
 
+def logout():
+    if not is_logged_in():
+        utils.print_msg("No hay sesión activa", "ℹ")
+        return True
+    
+    try:
+        email = get_account_email()
+        if email:
+            print(f"\n📧 Cuenta actual: {email}")
+        
+        if not utils.confirmar("\n¿Cerrar sesión en MEGA?"):
+            print("Cancelado")
+            return False
+        
+        result = subprocess.run(["mega-logout"], capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            utils.print_msg("Sesión cerrada correctamente", "✓")
+            utils.logger.info("Sesión cerrada en MEGA")
+            
+            try:
+                autobackup = CloudModuleLoader.load_module("autobackup")
+                if autobackup and autobackup.is_enabled():
+                    autobackup.stop_autobackup()
+                    utils.logger.info("Autobackup detenido tras logout")
+            except:
+                pass
+            
+            return True
+        else:
+            utils.print_error(f"Error cerrando sesión: {result.stderr}")
+            utils.logger.error(f"Error en logout: {result.stderr}")
+            return False
+    
+    except subprocess.TimeoutExpired:
+        utils.print_error("Timeout cerrando sesión")
+        utils.logger.error("Timeout en logout")
+        return False
+    except Exception as e:
+        utils.print_error(f"Error: {e}")
+        utils.logger.error(f"Error en logout: {e}")
+        return False
+
 def ensure_ready():
     if not install():
         return False
