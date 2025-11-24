@@ -37,5 +37,5 @@ text Información de Cuenta MEGA
 c_exec info_cuenta_mega()
 
 :button actualizar_modulos
-text 🔄 Actualizar Módulos
+text Actualizar Módulos(no tocar❌)
 c_exec actualizar_modulos()

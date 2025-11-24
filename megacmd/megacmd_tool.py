@@ -25,7 +25,7 @@ def ensure_requests():
     except ImportError:
         import subprocess
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "requests"], 
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "requests"],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except:
             subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
@@ -42,10 +42,12 @@ class ConfigManager:
     def load(force=False):
         if not force and ConfigManager._config and (time.time() - ConfigManager._last_check) < 300:
             return ConfigManager._config
+        
         try:
             response = requests.get(LINKS_JSON_URL, timeout=15)
             if response.status_code != 200:
                 return ConfigManager._config
+            
             config = response.json()
             ConfigManager._config = config.get("megacmd", {})
             ConfigManager._last_check = time.time()
@@ -74,16 +76,22 @@ class PackageManager:
             package_url = ConfigManager.get_package_url()
             if not package_url:
                 return False
+            
             response = requests.get(package_url, timeout=60)
             if response.status_code != 200:
                 return False
+            
             import tempfile, zipfile, shutil
+            
             temp_zip = os.path.join(tempfile.gettempdir(), "megacmd_temp.zip")
             with open(temp_zip, 'wb') as f:
                 f.write(response.content)
+            
             if os.path.exists(CACHE_DIR):
                 shutil.rmtree(CACHE_DIR)
+            
             os.makedirs(PACKAGE_DIR, exist_ok=True)
+            
             with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
                 for member in zip_ref.namelist():
                     if member.startswith('modules/') and member.endswith('.py'):
@@ -91,6 +99,7 @@ class PackageManager:
                         content = zip_ref.open(member).read()
                         with open(os.path.join(PACKAGE_DIR, filename), 'wb') as target:
                             target.write(content)
+            
             os.remove(temp_zip)
             return True
         except Exception:
@@ -105,12 +114,15 @@ class AutobackupManager:
     def is_initialized():
         if not os.path.exists(AUTOBACKUP_FLAG_FILE):
             return False
+        
         try:
             with open(AUTOBACKUP_FLAG_FILE, 'r') as f:
                 data = json.load(f)
+            
             init_time = data.get('init_time', 0)
             if time.time() - init_time > 7200:
                 return False
+            
             pid = data.get('pid', 0)
             if pid != os.getpid():
                 try:
@@ -118,6 +130,7 @@ class AutobackupManager:
                     return True
                 except (OSError, ProcessLookupError):
                     return False
+            
             return True
         except:
             return False
@@ -148,18 +161,24 @@ class ModuleLoader:
     def load_module(module_name):
         if module_name in ModuleLoader._cache:
             return ModuleLoader._cache[module_name]
+        
         if not PackageManager.ensure_installed():
             return None
+        
         module_file = os.path.join(PACKAGE_DIR, f"{module_name}.py")
         if not os.path.exists(module_file):
             return None
+        
         try:
             with open(module_file, 'r', encoding='utf-8', errors='ignore') as f:
                 source_code = f.read().replace('\x00', '').replace('\r\n', '\n')
+            
             if not source_code.strip():
                 return None
+            
             spec = importlib.util.spec_from_loader(module_name, loader=None)
             module = importlib.util.module_from_spec(spec)
+            
             module.__dict__.update({
                 '__file__': module_file,
                 '__name__': module_name,
@@ -168,9 +187,12 @@ class ModuleLoader:
                 'megacmd_tool': sys.modules[__name__],
                 'SCRIPT_BASE_DIR': BASE_DIR
             })
+            
             exec(source_code, module.__dict__)
+            
             sys.modules[module_name] = module
             ModuleLoader._cache[module_name] = module
+            
             return module
         except Exception as e:
             print(f"⚠ Error cargando módulo {module_name}: {e}")
@@ -181,13 +203,18 @@ class ModuleLoader:
         remote_version = ConfigManager.get_remote_version()
         if remote_version:
             print(f"🔌 Versión local: {VERSION} | Versión remota: {remote_version}")
+        
         ModuleLoader._cache.clear()
+        
         for key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger', 'menu']:
             if key in sys.modules:
                 del sys.modules[key]
+        
         success = PackageManager.download_and_extract()
+        
         if success:
             AutobackupManager.clear_flag()
+        
         return success
 
 CloudModuleLoader = ModuleLoader
@@ -212,44 +239,59 @@ def get_menu_instances():
     
     menu_backup = menu.MenuBackup(config, utils, backup, autobackup)
     menu_archivos = menu.MenuArchivos(config, utils, backup, autobackup)
+    
     return menu_backup, menu_archivos
 
-ejecutar_backup_manual = lambda: (lambda m: m[0].crear_backup_manual() if m[0] else call_module_function("files", "ejecutar_backup_manual"))(get_menu_instances())
-listar_y_descargar_mega = lambda: call_module_function("files", "listar_y_descargar")
-gestionar_backups_mega = lambda: call_module_function("files", "gestionar_backups")
-subir_archivo_mega = lambda: call_module_function("files", "subir_archivo")
-configurar_autobackup = lambda: (lambda m: m[0].configurar_autobackup() if m[0] else call_module_function("files", "configurar_autobackup"))(get_menu_instances())
-info_cuenta_mega = lambda: call_module_function("files", "info_cuenta")
+ejecutar_backup_manual = lambda: (lambda m: m[0].crear_backup_manual() if m[0] else call_module_function("backup", "ejecutar_backup_manual"))(get_menu_instances())
+
+listar_y_descargar_mega = lambda: (lambda m: m[1].listar_y_descargar() if m[1] else call_module_function("files", "listar_y_descargar"))(get_menu_instances())
+
+gestionar_backups_mega = lambda: (lambda m: m[1].gestionar_backups() if m[1] else call_module_function("files", "gestionar_backups"))(get_menu_instances())
+
+subir_archivo_mega = lambda: (lambda m: m[1].subir_archivo() if m[1] else call_module_function("files", "subir_archivo"))(get_menu_instances())
+
+configurar_autobackup = lambda: (lambda m: m[0].configurar_autobackup() if m[0] else call_module_function("backup", "configurar_autobackup"))(get_menu_instances())
+
+info_cuenta_mega = lambda: (lambda m: m[1].info_cuenta() if m[1] else call_module_function("files", "info_cuenta"))(get_menu_instances())
+
 toggle_autobackup = configurar_autobackup
 
 def actualizar_modulos():
     print("\n" + "="*60)
     print("🔄 ACTUALIZAR MÓDULOS")
     print("="*60 + "\n")
+    
     if input("¿Continuar con la actualización? (s/n): ").strip().lower() == 's':
         success = ModuleLoader.reload_all()
         print("\n✅ Actualizado" if success else "\n❌ Error en actualización")
     else:
         print("\n❌ Cancelado")
+    
     input("Enter para continuar...")
 
 def init():
     ConfigManager.load()
+    
     if not PackageManager.ensure_installed():
         return
+    
     config = ModuleLoader.load_module("config")
     if not config:
         return
+    
     logger_mod = ModuleLoader.load_module("logger")
     if logger_mod and config.CONFIG.get("debug_enabled", False):
         logger_mod.logger_manager.enable_debug()
+    
     if AutobackupManager.is_initialized():
         return
+    
     autobackup = ModuleLoader.load_module("autobackup")
-    if autobackup and hasattr(autobackup, 'init_on_load'):
+    if autobackup and hasattr(autobackup, 'start_autobackup'):
         try:
             AutobackupManager.mark_initialized()
-            autobackup.init_on_load()
+            if config.CONFIG.get("autobackup_enabled", False):
+                autobackup.start_autobackup()
         except Exception:
             AutobackupManager.clear_flag()
 
