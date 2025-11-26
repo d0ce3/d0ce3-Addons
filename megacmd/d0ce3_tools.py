@@ -65,50 +65,6 @@ class ConfigManager:
         config = ConfigManager.load()
         return config.get("version") if config else None
 
-class PackageManager:
-    @staticmethod
-    def is_installed():
-        return os.path.exists(PACKAGE_DIR) and len(os.listdir(PACKAGE_DIR)) > 0
-    
-    @staticmethod
-    def download_and_extract():
-        try:
-            package_url = ConfigManager.get_package_url()
-            if not package_url:
-                return False
-            
-            response = requests.get(package_url, timeout=60)
-            if response.status_code != 200:
-                return False
-            
-            import tempfile, zipfile, shutil
-            
-            temp_zip = os.path.join(tempfile.gettempdir(), "megacmd_temp.zip")
-            with open(temp_zip, 'wb') as f:
-                f.write(response.content)
-            
-            if os.path.exists(CACHE_DIR):
-                shutil.rmtree(CACHE_DIR)
-            
-            os.makedirs(PACKAGE_DIR, exist_ok=True)
-            
-            with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
-                for member in zip_ref.namelist():
-                    if member.startswith('modules/') and member.endswith('.py'):
-                        filename = os.path.basename(member)
-                        content = zip_ref.open(member).read()
-                        with open(os.path.join(PACKAGE_DIR, filename), 'wb') as target:
-                            target.write(content)
-            
-            os.remove(temp_zip)
-            return True
-        except Exception:
-            return False
-    
-    @staticmethod
-    def ensure_installed():
-        return True if PackageManager.is_installed() else PackageManager.download_and_extract()
-
 class AutobackupManager:
     @staticmethod
     def is_initialized():
@@ -162,8 +118,10 @@ class ModuleLoader:
         if module_name in ModuleLoader._cache:
             return ModuleLoader._cache[module_name]
         
-        if not PackageManager.ensure_installed():
-            return None
+        if module_name != "package_manager":
+            pm = ModuleLoader._get_package_manager()
+            if not pm or not pm.PackageManager.ensure_installed():
+                return None
         
         module_file = os.path.join(PACKAGE_DIR, f"{module_name}.py")
         if not os.path.exists(module_file):
@@ -199,6 +157,44 @@ class ModuleLoader:
             return None
     
     @staticmethod
+    def _get_package_manager():
+        """Carga y configura el package manager."""
+        if "package_manager" in ModuleLoader._cache:
+            return ModuleLoader._cache["package_manager"]
+        
+        module_file = os.path.join(PACKAGE_DIR, "package_manager.py")
+        if not os.path.exists(module_file):
+            os.makedirs(PACKAGE_DIR, exist_ok=True)
+            return None
+        
+        try:
+            with open(module_file, 'r', encoding='utf-8', errors='ignore') as f:
+                source_code = f.read().replace('\x00', '').replace('\r\n', '\n')
+            
+            spec = importlib.util.spec_from_loader("package_manager", loader=None)
+            module = importlib.util.module_from_spec(spec)
+            
+            module.__dict__.update({
+                '__file__': module_file,
+                '__name__': "package_manager",
+                'ModuleLoader': ModuleLoader,
+                'CloudModuleLoader': ModuleLoader
+            })
+            
+            exec(source_code, module.__dict__)
+            
+            if hasattr(module, 'set_directories'):
+                module.set_directories(CACHE_DIR, PACKAGE_DIR, LINKS_JSON_URL)
+            
+            sys.modules["package_manager"] = module
+            ModuleLoader._cache["package_manager"] = module
+            
+            return module
+        except Exception as e:
+            print(f"⚠ Error cargando package_manager: {e}")
+            return None
+    
+    @staticmethod
     def reload_all():
         remote_version = ConfigManager.get_remote_version()
         if remote_version:
@@ -206,11 +202,12 @@ class ModuleLoader:
         
         ModuleLoader._cache.clear()
         
-        for key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger', 'menu']:
+        for key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger', 'menu', 'package_manager']:
             if key in sys.modules:
                 del sys.modules[key]
         
-        success = PackageManager.download_and_extract()
+        pm = ModuleLoader._get_package_manager()
+        success = pm.PackageManager.reload_modules() if pm else False
         
         if success:
             AutobackupManager.clear_flag()
@@ -272,7 +269,8 @@ def actualizar_modulos():
 def init():
     ConfigManager.load()
     
-    if not PackageManager.ensure_installed():
+    pm = ModuleLoader._get_package_manager()
+    if not pm or not pm.PackageManager.ensure_installed():
         return
     
     config = ModuleLoader.load_module("config")
