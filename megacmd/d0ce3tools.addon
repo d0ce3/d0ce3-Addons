@@ -3,14 +3,12 @@ a_name Herramientas pa que elyx chambeé
 a_version 1.0.0
 a_author d0ce3_
 
-⫘⫘⫘⫘Puto el que sea chismoso :p⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘
-
 :auto
 download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/d0ce3tools.addon /tmp/d0ce3_temp.addon
-download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/d0ce3_tools.py /tmp/d0ce3tools_temp.py
+download_file https://d0ce3.github.io/d0ce3-Addons/megacmd/d0ce3_tools.py /tmp/d0ce3_temp.py
 exec mv -f /tmp/d0ce3_temp.addon addons/d0ce3tools.addon
-exec mv -f /tmp/d0ce3tools_temp.py addons/d0ce3_tools.py
-exec echo "✓ Addon actualizado, gracias por utilizar mi addon!!! \n |by:d0ce3|"
+exec mv -f /tmp/d0ce3_temp.py addons/d0ce3_tools.py
+exec echo "✓ Addon actualizado, gracias por utilizar mi addon!!! \n \n \n |by:d0ce3|"
 
 :button crear_backup
 text Crear Backup en MEGA
