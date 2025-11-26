@@ -198,12 +198,26 @@ class MenuBackup:
                 estado_texto = f"{Tema.ERROR} DESACTIVADO"
                 estado_color = Tema.rojo(estado_texto)
             
+            # FUNCIÓN 1: Elimina códigos ANSI para calcular longitud visual
+            def len_sin_ansi(texto):
+                import re
+                return len(re.sub(r'\033\[[0-9;]*m', '', texto))
+            
+            # FUNCIÓN 2: Crea una línea del cuadro con padding perfecto
+            def pad_linea(label, valor_coloreado):
+                longitud_label = len(label) + 2
+                longitud_valor = len_sin_ansi(valor_coloreado)
+                espacios_necesarios = 46 - longitud_label - longitud_valor
+                contenido = f" {Tema.m(label)}: {valor_coloreado}{' ' * espacios_necesarios} "
+                return Tema.m("│") + contenido + Tema.m("│")
+            
+            # Imprime el cuadro con alineación perfecta
             print(Tema.m("┌" + "─" * 48 + "┐"))
-            print(Tema.m(f"│ Estado: {estado_color}"))
-            print(Tema.m(f"│ Intervalo: {Tema.blanco(f'{intervalo_actual} min'):<38} │"))
-            print(Tema.m(f"│ Carpeta: {Tema.blanco(server_folder):<38} │"))
-            print(Tema.m(f"│ Destino: {Tema.blanco(backup_folder):<38} │"))
-            print(Tema.m(f"│ Máximo: {Tema.blanco(f'{max_backups} backups'):<38} │"))
+            print(pad_linea("Estado", estado_color))
+            print(pad_linea("Intervalo", Tema.blanco(f"{intervalo_actual} min")))
+            print(pad_linea("Carpeta", Tema.blanco(server_folder)))
+            print(pad_linea("Destino", Tema.blanco(backup_folder)))
+            print(pad_linea("Máximo", Tema.blanco(f"{max_backups} backups")))
             print(Tema.m("└" + "─" * 48 + "┘"))
             print()
             

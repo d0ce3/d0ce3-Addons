@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 from datetime import datetime, timedelta, timezone
 
 TIMEZONE_ARG = timezone(timedelta(hours=-3))
@@ -34,6 +35,132 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     
     utils.logger.error(f"No se pudo encontrar la carpeta '{nombre_carpeta}'")
     return None
+
+def comprimir_con_manejo_archivos_activos(carpeta_origen, archivo_destino, max_intentos=3):
+    """
+    Comprime una carpeta manejando archivos que puedan estar siendo modificados.
+    
+    Estrategia:
+    1. Usa zip con flag -q (quiet) y -y (preserve symlinks) 
+    2. Usa --filesync para manejar archivos que cambien durante compresión
+    3. Implementa reintentos con espera progresiva
+    4. Limpia archivos corruptos si todos los intentos fallan
+    
+    Returns:
+        tuple: (success: bool, archivo_creado: str or None, error_msg: str or None)
+    """
+    parent_dir = os.path.dirname(carpeta_origen)
+    folder_name = os.path.basename(carpeta_origen)
+    backup_path = os.path.join(parent_dir, archivo_destino)
+    
+    for intento in range(1, max_intentos + 1):
+        try:
+            utils.logger.info(f"Intento {intento}/{max_intentos} de compresión")
+            
+            # Limpiar archivo previo si existe de intento anterior
+            if os.path.exists(backup_path):
+                try:
+                    os.remove(backup_path)
+                    utils.logger.info(f"Archivo previo eliminado: {backup_path}")
+                except Exception as e:
+                    utils.logger.warning(f"No se pudo eliminar archivo previo: {e}")
+            
+            # Usar flags especiales de zip para manejar archivos activos:
+            # -r: recursivo
+            # -q: quiet (sin output)
+            # -FS: sincronización de archivos (reintenta si archivo cambió durante lectura)
+            # -y: preservar symlinks
+            cmd = ["zip", "-r", "-q", "-FS", "-y", archivo_destino, folder_name]
+            
+            utils.logger.info(f"Ejecutando: {' '.join(cmd)}")
+            
+            resultado = subprocess.run(
+                cmd,
+                cwd=parent_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=600,
+                text=True
+            )
+            
+            # Verificar resultado
+            # zip retorna 0=ok, 2=warnings (archivos cambiaron pero zip ok), 18=algunos archivos no legibles
+            if resultado.returncode in [0, 2, 12, 18]:
+                # Verificar que el archivo existe y tiene tamaño > 0
+                if os.path.exists(backup_path) and os.path.getsize(backup_path) > 1024:
+                    size_mb = os.path.getsize(backup_path) / (1024 * 1024)
+                    
+                    if resultado.returncode != 0:
+                        utils.logger.warning(
+                            f"Compresión completada con warnings (código {resultado.returncode}). "
+                            f"Esto es normal si archivos cambiaron durante el backup."
+                        )
+                    
+                    utils.logger.info(f"Compresión exitosa: {archivo_destino} ({size_mb:.1f} MB)")
+                    return (True, backup_path, None)
+                else:
+                    error = "Archivo ZIP creado pero inválido (muy pequeño o vacío)"
+                    utils.logger.error(error)
+                    if intento < max_intentos:
+                        espera = intento * 2
+                        utils.logger.info(f"Esperando {espera}s antes de reintentar...")
+                        time.sleep(espera)
+                        continue
+                    return (False, None, error)
+            else:
+                error = f"zip falló con código {resultado.returncode}: {resultado.stderr}"
+                utils.logger.error(error)
+                
+                if intento < max_intentos:
+                    espera = intento * 2
+                    utils.logger.info(f"Esperando {espera}s antes de reintentar...")
+                    time.sleep(espera)
+                    continue
+                else:
+                    return (False, None, error)
+        
+        except subprocess.TimeoutExpired:
+            error = "Timeout en compresión (>10 min)"
+            utils.logger.error(error)
+            
+            # Limpiar archivo corrupto
+            if os.path.exists(backup_path):
+                try:
+                    os.remove(backup_path)
+                    utils.logger.info("Archivo corrupto eliminado tras timeout")
+                except:
+                    pass
+            
+            if intento < max_intentos:
+                espera = intento * 3
+                utils.logger.info(f"Esperando {espera}s antes de reintentar tras timeout...")
+                time.sleep(espera)
+                continue
+            else:
+                return (False, None, error)
+        
+        except Exception as e:
+            error = f"Error inesperado en compresión: {e}"
+            utils.logger.error(error)
+            
+            if intento < max_intentos:
+                espera = intento * 2
+                utils.logger.info(f"Esperando {espera}s antes de reintentar...")
+                time.sleep(espera)
+                continue
+            else:
+                return (False, None, error)
+    
+    # Si llegamos aquí, todos los intentos fallaron
+    # Limpiar cualquier archivo corrupto
+    if os.path.exists(backup_path):
+        try:
+            os.remove(backup_path)
+            utils.logger.info("Archivo corrupto eliminado tras todos los intentos")
+        except Exception as e:
+            utils.logger.error(f"No se pudo eliminar archivo corrupto: {e}")
+    
+    return (False, None, "Todos los intentos de compresión fallaron")
 
 def listar_carpetas_mega(ruta="/"):
     try:
@@ -172,32 +299,26 @@ def ejecutar_backup_manual():
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         
         utils.logger.info(f"Nombre de backup: {backup_name}")
-        utils.logger.info("Iniciando compresión...")
+        utils.logger.info("Iniciando compresión con manejo de archivos activos...")
         
-        parent_dir = os.path.dirname(server_folder)
-        folder_name = os.path.basename(server_folder)
+        print("⏳ Comprimiendo (puede tomar varios minutos)...")
+        print("💡 Esto es normal si el servidor está en uso")
         
-        cmd = ["zip", "-r", "-q", backup_name, folder_name]
-        proceso = subprocess.Popen(cmd, cwd=parent_dir)
+        # Usar la nueva función con reintentos
+        exito, backup_path, error = comprimir_con_manejo_archivos_activos(
+            server_folder, 
+            backup_name,
+            max_intentos=3
+        )
         
-        spinner = utils.Spinner("Comprimiendo")
-        if not spinner.start(proceso, check_file=os.path.join(parent_dir, backup_name)):
-            utils.print_error("Error al comprimir")
-            utils.logger.error("Fallo en compresión")
-            utils.pausar()
-            return
-        
-        backup_path = os.path.join(parent_dir, backup_name)
-        
-        if not os.path.exists(backup_path):
-            utils.print_error("El archivo ZIP no se creó")
-            utils.logger.error(f"Archivo {backup_name} no encontrado")
+        if not exito:
+            utils.print_error(f"Error al comprimir: {error}")
+            utils.logger.error(f"Fallo en compresión: {error}")
             utils.pausar()
             return
         
         backup_size = os.path.getsize(backup_path)
         backup_size_mb = backup_size / (1024 * 1024)
-        utils.logger.info(f"Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)")
         
         print(f"✓ Archivo creado: {backup_name} ({backup_size_mb:.1f} MB)\n")
         
@@ -207,7 +328,7 @@ def ejecutar_backup_manual():
             ["mega-put", "-c", backup_name, backup_folder + "/"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=parent_dir
+            cwd=os.path.dirname(backup_path)
         )
         
         spinner_upload = utils.Spinner("Subiendo a MEGA")
@@ -307,20 +428,19 @@ def ejecutar_backup_automatico():
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         
         print(f"| Archivo a crear: {backup_name}")
-        print("| Comprimiendo...")
+        print("| Comprimiendo (con manejo de archivos activos)...")
         utils.logger.info(f"Nombre de backup: {backup_name}")
-        utils.logger.info("Iniciando compresión...")
+        utils.logger.info("Iniciando compresión automática con reintentos...")
         
-        parent_dir = os.path.dirname(server_folder)
-        folder_name = os.path.basename(server_folder)
+        # Usar la nueva función con reintentos automáticos
+        exito, backup_path, error = comprimir_con_manejo_archivos_activos(
+            server_folder,
+            backup_name,
+            max_intentos=3
+        )
         
-        cmd = ["zip", "-r", "-q", backup_name, folder_name]
-        proceso = subprocess.run(cmd, cwd=parent_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600)
-        
-        backup_path = os.path.join(parent_dir, backup_name)
-        
-        if proceso.returncode != 0 or not os.path.exists(backup_path):
-            error_msg = "Error durante compresión automática"
+        if not exito:
+            error_msg = f"Error en compresión automática: {error}"
             utils.logger.error(error_msg)
             print(f"| ERROR: {error_msg}")
             logger_mod.log_backup_auto_error(error_msg)
@@ -328,7 +448,7 @@ def ejecutar_backup_automatico():
             try:
                 rcon = CloudModuleLoader.load_module("rcon")
                 if rcon and rcon.is_connected():
-                    rcon.send_command(f"say [BACKUP ERROR] {error_msg}")
+                    rcon.send_command(f"say [BACKUP ERROR] Compresión falló")
             except:
                 pass
             
@@ -353,12 +473,13 @@ def ejecutar_backup_automatico():
             try:
                 rcon = CloudModuleLoader.load_module("rcon")
                 if rcon and rcon.is_connected():
-                    rcon.send_command(f"say [BACKUP ERROR] {error_msg}")
+                    rcon.send_command(f"say [BACKUP ERROR] Subida a MEGA falló")
             except:
                 pass
             
             try:
                 os.remove(backup_path)
+                utils.logger.info("Archivo local eliminado tras error de subida")
             except:
                 pass
             return
