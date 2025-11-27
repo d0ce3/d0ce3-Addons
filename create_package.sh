@@ -32,6 +32,6 @@ rm -rf /tmp/megacmd_package
 echo "✅ Paquete creado: megacmd/d0ce3tools_${VERSION}.zip"
 echo ""
 echo "📤 Ahora ejecutá:"
-c_exec git add .
-echo git commit -m "fix"
+echo git add .
+echo git commit -m 'fix'
 echo git push

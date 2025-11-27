@@ -37,18 +37,6 @@ def encontrar_carpeta_servidor(nombre_carpeta="servidor_minecraft"):
     return None
 
 def comprimir_con_manejo_archivos_activos(carpeta_origen, archivo_destino, max_intentos=3):
-    """
-    Comprime una carpeta manejando archivos que puedan estar siendo modificados.
-    
-    Estrategia:
-    1. Usa zip con flag -q (quiet) y -y (preserve symlinks) 
-    2. Usa --filesync para manejar archivos que cambien durante compresión
-    3. Implementa reintentos con espera progresiva
-    4. Limpia archivos corruptos si todos los intentos fallan
-    
-    Returns:
-        tuple: (success: bool, archivo_creado: str or None, error_msg: str or None)
-    """
     parent_dir = os.path.dirname(carpeta_origen)
     folder_name = os.path.basename(carpeta_origen)
     backup_path = os.path.join(parent_dir, archivo_destino)
@@ -428,7 +416,7 @@ def ejecutar_backup_automatico():
         backup_name = f"{backup_prefix}_{timestamp}.zip"
         
         print(f"| Archivo a crear: {backup_name}")
-        print("| Comprimiendo (con manejo de archivos activos)...")
+        print("| Comprimiendo...")
         utils.logger.info(f"Nombre de backup: {backup_name}")
         utils.logger.info("Iniciando compresión automática con reintentos...")
         
