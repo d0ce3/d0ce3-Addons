@@ -116,10 +116,7 @@ class ModuleLoader:
     
     @staticmethod
     def _ensure_package_manager_available():
-        """
-        Carga el package_manager desde el cache si existe.
-        Si no existe, retorna None y se usará el bootstrap integrado.
-        """
+        """Carga el package_manager desde el cache si existe"""
         if ModuleLoader._package_manager is not None:
             return ModuleLoader._package_manager
         
@@ -153,10 +150,6 @@ class ModuleLoader:
     
     @staticmethod
     def _bootstrap_ensure_installed():
-        """
-        Versión bootstrap de ensure_installed que no depende de package_manager.py
-        Se usa solo si package_manager.py no está disponible aún.
-        """
         if os.path.exists(PACKAGE_DIR) and len(os.listdir(PACKAGE_DIR)) > 0:
             return True
         
@@ -198,13 +191,12 @@ class ModuleLoader:
         if module_name in ModuleLoader._cache:
             return ModuleLoader._cache[module_name]
         
-        # Intentar usar package_manager si está disponible
         pm = ModuleLoader._ensure_package_manager_available()
         if pm:
             if not pm.PackageManager.ensure_installed():
                 return None
         else:
-            # Bootstrap: usar método integrado
+
             if not ModuleLoader._bootstrap_ensure_installed():
                 return None
         
@@ -250,16 +242,16 @@ class ModuleLoader:
         ModuleLoader._cache.clear()
         ModuleLoader._package_manager = None
         
-        for key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 'logger', 'menu', 'package_manager']:
-            if key in sys.modules:
+        for key in list(sys.modules.keys()):
+            if key in ['config', 'utils', 'megacmd', 'backup', 'files', 'autobackup', 
+                      'logger', 'menu', 'package_manager', 'dc_menu', 'dc_codespace', 
+                      'discord_notifier']:
                 del sys.modules[key]
         
-        # Intentar usar package_manager si está disponible
         pm = ModuleLoader._ensure_package_manager_available()
         if pm:
             success = pm.PackageManager.reload_modules()
         else:
-            # Bootstrap: usar método integrado
             success = ModuleLoader._bootstrap_ensure_installed()
         
         if success:
@@ -306,6 +298,10 @@ info_cuenta_mega = lambda: (lambda m: m[1].info_cuenta() if m[1] else call_modul
 
 toggle_autobackup = configurar_autobackup
 
+def menu_discord():
+    """Abre el menú principal de Discord"""
+    call_module_function("dc_menu", "menu_principal_discord")
+
 def actualizar_modulos():
     print("\n" + "="*60)
     print("🔄 ACTUALIZAR MÓDULOS")
@@ -322,7 +318,6 @@ def actualizar_modulos():
 def init():
     ConfigManager.load()
     
-    # Intentar usar package_manager si está disponible, sino bootstrap
     pm = ModuleLoader._ensure_package_manager_available()
     if pm:
         if not pm.PackageManager.ensure_installed():
