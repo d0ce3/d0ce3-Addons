@@ -1,7 +1,3 @@
-"""
-API HTTP para que el bot consulte eventos desde el Codespace
-Expone endpoints Flask para polling de eventos
-"""
 import json
 from datetime import datetime
 from typing import Optional

@@ -1,8 +1,8 @@
 {
   "megacmd": {
-    "version": "1.1.0",
+    "version": "1.0.1",
     "addon": "https://d0ce3.github.io/d0ce3-Addons/megacmd/d0ce3tools.addon",
     "tool": "https://d0ce3.github.io/d0ce3-Addons/megacmd/d0ce3_tools.py",
-    "package": "https://d0ce3.github.io/d0ce3-Addons/megacmd/d0ce3tools_1.1.0.zip"
+    "package": "https://d0ce3.github.io/d0ce3-Addons/megacmd/d0ce3tools_1.0.1.zip"
   }
 }

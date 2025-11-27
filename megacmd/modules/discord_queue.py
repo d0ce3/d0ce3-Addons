@@ -1,7 +1,3 @@
-"""
-Sistema de colas persistente para notificaciones Discord
-Maneja eventos de forma confiable con reintentos automáticos
-"""
 import sqlite3
 import json
 import os

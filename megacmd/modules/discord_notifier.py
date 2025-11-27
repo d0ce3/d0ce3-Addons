@@ -1,7 +1,3 @@
-"""
-Notificador Discord - Migrado a arquitectura basada en colas
-Mantiene compatibilidad con la API anterior pero usa el sistema de colas
-"""
 import os
 import json
 from datetime import datetime

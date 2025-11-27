@@ -1,7 +1,3 @@
-"""
-Publisher de eventos Discord desde el Codespace
-Publica eventos a la cola SQLite para que el bot los procese
-"""
 import os
 from typing import Optional, Dict
 from datetime import datetime

@@ -1,7 +1,3 @@
-"""
-Gestor centralizado de configuración Discord
-Singleton que unifica todas las fuentes de configuración
-"""
 import os
 import subprocess
 from typing import Optional

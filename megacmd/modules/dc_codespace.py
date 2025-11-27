@@ -1,7 +1,3 @@
-"""
-Módulo de lógica para integración Discord + Codespace
-Maneja la comunicación entre el Codespace y el bot de Discord
-"""
 import os
 import subprocess
 
