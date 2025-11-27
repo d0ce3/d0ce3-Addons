@@ -1,3 +1,7 @@
+"""
+Módulo de lógica para integración Discord + Codespace
+Maneja la comunicación entre el Codespace y el bot de Discord
+"""
 import os
 import subprocess
 
@@ -175,83 +179,92 @@ def verificar_configuracion_discord():
     return estado
 
 
+# Colores del tema
+MORADO = "\033[95m"
+VERDE = "\033[92m"
+AMARILLO = "\033[93m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+
+def m(texto):
+    return f"{MORADO}{texto}{RESET}"
+
+def mb(texto):
+    return f"{BOLD}{MORADO}{texto}{RESET}"
+
+def verde(texto):
+    return f"{VERDE}{texto}{RESET}"
+
+def amarillo(texto):
+    return f"{AMARILLO}{texto}{RESET}"
+
+
 def mostrar_info_conexion():
     """Muestra información de conexión del Codespace y servidor Minecraft"""
     utils.limpiar_pantalla()
-    print("\n" + "="*70)
-    print("🌐 INFORMACIÓN DE CONEXIÓN")
-    print("="*70 + "\n")
+    print("\n" + m("─" * 50))
+    print(mb("INFORMACIÓN DE CONEXIÓN"))
+    print(m("─" * 50) + "\n")
     
     # Nombre del Codespace
     codespace_name = obtener_nombre_codespace()
     if codespace_name:
-        utils.print_msg(f"Codespace: {codespace_name}", "📦")
+        print(verde(f"✓ Codespace: {codespace_name}"))
     else:
-        utils.print_warning("Codespace no detectado (¿ejecutando fuera de Codespace?)")
+        print(amarillo("⚠ Codespace no detectado"))
     
     # IP pública
     print()
     ip = obtener_ip_codespace()
     if ip:
-        utils.print_msg(f"IP pública: {ip}", "🌍")
+        print(verde(f"✓ IP pública: {ip}"))
     else:
-        utils.print_warning("No se pudo obtener IP pública")
+        print(amarillo("⚠ No se pudo obtener IP pública"))
     
     # Servidor Minecraft
     print()
     info_mc = detectar_servidor_minecraft()
     if info_mc:
         ip_completa = generar_ip_minecraft()
-        utils.print_msg("Servidor Minecraft detectado", "🎮")
-        print(f"   Puerto: {info_mc['puerto']}")
-        print(f"   IP de conexión: {ip_completa}")
+        print(verde("✓ Servidor Minecraft detectado"))
+        print(f"  Puerto: {info_mc['puerto']}")
+        print(f"  IP: {ip_completa}")
     else:
-        utils.print_warning("Servidor Minecraft no detectado")
-        print("   Asegurate de que el servidor esté corriendo")
+        print(amarillo("⚠ Servidor Minecraft no detectado"))
     
     # Puertos abiertos
     print()
     puertos = obtener_puertos_abiertos()
     if puertos:
         puertos_str = ', '.join(map(str, puertos[:10]))
-        utils.print_msg(f"Puertos abiertos: {puertos_str}", "🔌")
+        print(f"Puertos abiertos: {puertos_str}")
         if len(puertos) > 10:
-            print(f"   ... y {len(puertos) - 10} más")
-    else:
-        utils.print_warning("No se detectaron puertos abiertos")
+            print(f"  ... y {len(puertos) - 10} más")
     
     # Estado de configuración Discord
-    print()
-    print("─" * 70)
+    print("\n" + m("─" * 50))
+    print(mb("Configuración Discord"))
     print()
     estado = verificar_configuracion_discord()
     
-    print("📊 Configuración Discord:")
-    
     if estado["user_id_config"] or estado["user_id_env"]:
-        utils.print_msg("User ID configurado", "✓")
+        print(verde("✓ User ID configurado"))
     else:
-        utils.print_warning("User ID no configurado")
+        print(amarillo("✗ User ID no configurado"))
     
     if estado["webhook_url"]:
-        utils.print_msg("Webhook URL configurada", "✓")
+        print(verde("✓ Webhook URL configurada"))
     else:
-        utils.print_warning("Webhook URL no configurada")
-    
-    if estado["codespace_name"]:
-        utils.print_msg("Codespace detectado", "✓")
-    else:
-        utils.print_warning("Codespace no detectado")
+        print(amarillo("✗ Webhook URL no configurada"))
     
     print()
     
     if estado["configuracion_completa"]:
-        utils.print_msg("✅ Notificaciones de backups activas", "🔔")
+        print(verde("✓ Notificaciones activas"))
     else:
-        utils.print_warning("⚠️  Notificaciones de backups desactivadas")
-        print("   Usa 'Configurar Discord User ID' y 'Ayuda Webhook' para configurar")
+        print(amarillo("⚠ Notificaciones desactivadas"))
     
-    print("\n" + "="*70)
+    print("\n" + m("─" * 50))
     utils.pausar()
 
 
@@ -273,56 +286,48 @@ def generar_comando_discord():
 def mostrar_comando_sugerido():
     """Muestra el comando sugerido para usar en Discord"""
     utils.limpiar_pantalla()
-    print("\n" + "="*70)
-    print("💡 COMANDO SUGERIDO PARA DISCORD")
-    print("="*70 + "\n")
+    print("\n" + m("─" * 50))
+    print(mb("COMANDO SUGERIDO PARA DISCORD"))
+    print(m("─" * 50) + "\n")
     
     comando = generar_comando_discord()
     
     if comando:
-        utils.print_msg("Servidor Minecraft detectado", "✓")
-        print(f"\nUsá este comando en Discord para monitorear tu servidor:\n")
-        print(f"   {comando}\n")
+        print(verde("✓ Servidor Minecraft detectado\n"))
+        print("Usa este comando en Discord:\n")
+        print(f"  {comando}\n")
         
-        print("Esto hará que el bot:")
-        print("   • Inicie el Codespace si está detenido")
-        print("   • Monitoree el servidor cada minuto")
-        print("   • Te notifique cuando esté online/offline")
-        print("   • Muestre información de jugadores conectados\n")
+        print("El bot:")
+        print("  • Inicia el Codespace si está detenido")
+        print("  • Monitorea el servidor cada minuto")
+        print("  • Te notifica cuando cambie el estado\n")
         
-        # Intentar copiar al portapapeles
+        # Intentar copiar
         try:
             import pyperclip
-            if utils.confirmar("¿Copiar comando al portapapeles?"):
+            if utils.confirmar("¿Copiar comando?"):
                 pyperclip.copy(comando)
-                utils.print_msg("Comando copiado!")
+                print(verde("\n✓ Comando copiado"))
                 utils.logger.info(f"Comando copiado: {comando}")
         except ImportError:
-            print("\n💡 Tip: Instalá pyperclip para copiar automáticamente")
-            print("   pip install pyperclip")
+            pass
         except Exception as e:
             utils.logger.warning(f"No se pudo copiar: {e}")
     else:
-        utils.print_warning("Servidor Minecraft no detectado")
-        print("\nOpciones:")
-        print("\n1. Si el servidor NO está corriendo:")
-        print("   • Iniciá tu servidor de Minecraft primero")
-        print("   • Volvé a ejecutar esta opción")
+        print(amarillo("⚠ Servidor Minecraft no detectado\n"))
+        print("Opciones:\n")
+        print("1. Si el servidor NO está corriendo:")
+        print("   • Inicia tu servidor primero")
         
-        print("\n2. Si el servidor YA está corriendo:")
-        print("   • Usa el comando básico en Discord:")
-        print("     /minecraft_start")
-        
-        print("\n3. Si conocés la IP:")
-        print("   • Especificá manualmente:")
-        print("     /minecraft_start ip:tu-ip:25565")
+        print("\n2. Comando básico en Discord:")
+        print("   /minecraft_start")
         
         ip = obtener_ip_codespace()
         if ip:
-            print(f"\n📌 Tu IP actual es: {ip}")
-            print(f"   Podrías probar: /minecraft_start ip:{ip}:25565")
+            print(f"\n3. Tu IP actual: {ip}")
+            print(f"   Prueba: /minecraft_start ip:{ip}:25565")
     
-    print("\n" + "="*70)
+    print("\n" + m("─" * 50))
     utils.pausar()
 
 
