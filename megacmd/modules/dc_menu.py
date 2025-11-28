@@ -1,14 +1,16 @@
+"""
+Módulo de menú para integración con Discord
+Maneja la UI y presentación de información relacionada con el bot de Discord
+"""
 import os
 import subprocess
 
-# URL de invitación del bot
 DISCORD_BOT_INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1331828744985509959&permissions=8&scope=bot%20applications.commands"
 
 utils = CloudModuleLoader.load_module("utils")
 config = CloudModuleLoader.load_module("config")
 logger = CloudModuleLoader.load_module("logger")
 
-# Colores del tema (mismo que menu.py)
 MORADO = "\033[95m"
 VERDE = "\033[92m"
 ROJO = "\033[91m"
@@ -22,7 +24,6 @@ def m(texto):
     return f"{MORADO}{texto}{RESET}"
 
 def mb(texto):
-
     return f"{BOLD}{MORADO}{texto}{RESET}"
 
 def verde(texto):
@@ -54,32 +55,25 @@ def _auto_configurar_web_server():
             print("📝 Creando start_web_server.sh...")
             with open(sh_path, "w") as f:
                 f.write("""#!/bin/bash
-# Script de inicio automático del servidor web de control de Minecraft
-
 echo "========================================="
 echo "🚀 Iniciando servidor web de control"
 echo "========================================="
 
-# Generar token si no existe
 if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
     export WEB_SERVER_AUTH_TOKEN=$(openssl rand -hex 32)
     echo "🔑 Token generado: $WEB_SERVER_AUTH_TOKEN"
 fi
 
-# Puerto
 PORT=${PORT:-8080}
 echo "📡 Puerto: $PORT"
 
-# Ir al directorio correcto
 cd "$(dirname "$0")"
 
-# Instalar Flask si no está
 if ! python3 -c "import flask" 2>/dev/null; then
     echo "📦 Instalando Flask..."
     pip3 install flask
 fi
 
-# Iniciar servidor en segundo plano
 nohup python3 web_server.py > /tmp/web_server.log 2>&1 &
 
 echo "✅ Servidor web iniciado en segundo plano"
@@ -90,7 +84,6 @@ echo "========================================="
             print(verde("✓ start_web_server.sh creado"))
         else:
             print(verde("✓ start_web_server.sh ya existe"))
-
 
         if os.path.exists(bashrc_path):
             with open(bashrc_path, "r") as f:
@@ -120,7 +113,6 @@ echo "========================================="
                 print(amarillo("⚠ No se pudo instalar Flask automáticamente"))
                 print("  Instálalo manualmente: pip3 install flask")
 
-        # 4. Iniciar el servidor web ahora mismo
         print("\n🚀 Iniciando servidor web...")
         try:
             subprocess.Popen(['bash', sh_path],
@@ -148,6 +140,16 @@ echo "========================================="
         logger.log("ERROR", f"Error en auto_configurar_web_server: {e}")
 
 
+def _cargar_discord_queue():
+    try:
+        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        if discord_queue is not None and hasattr(discord_queue, 'queue_instance'):
+            return discord_queue
+        return None
+    except Exception:
+        return None
+
+
 def menu_principal_discord():
     while True:
         utils.limpiar_pantalla()
@@ -156,21 +158,24 @@ def menu_principal_discord():
         print(mb("INTEGRACIÓN DISCORD - d0ce3|tools Bot"))
         print(m("─" * 50))
         
-        # Estado rápido
         user_id = config.CONFIG.get("discord_user_id") or os.getenv("DISCORD_USER_ID")
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
         
-        # Verificar estado de la cola
-        try:
-            discord_queue = CloudModuleLoader.load_module("discord_queue")
-            stats = discord_queue.queue_instance.get_stats()
-            eventos_pendientes = stats.get('pending', 0)
-        except:
-            eventos_pendientes = 0
+        eventos_pendientes = 0
+        discord_queue_disponible = False
+        discord_queue = _cargar_discord_queue()
+        
+        if discord_queue:
+            try:
+                stats = discord_queue.queue_instance.get_stats()
+                eventos_pendientes = stats.get('pending', 0)
+                discord_queue_disponible = True
+            except Exception:
+                pass
         
         if user_id and webhook_url:
             print(verde("\n✓ Configuración completa"))
-            if eventos_pendientes > 0:
+            if discord_queue_disponible and eventos_pendientes > 0:
                 print(amarillo(f"  ⚠ {eventos_pendientes} evento(s) pendiente(s)"))
         elif user_id or webhook_url:
             print(f"{AMARILLO}\n⚠ Configuración incompleta{RESET}")
@@ -183,8 +188,14 @@ def menu_principal_discord():
         print(m("│ 2. Configurar integración                      │"))
         print(m("│ 3. Ver información de conexión                 │"))
         print(m("│ 4. Comando sugerido para Discord               │"))
-        print(m("│ 5. Ver estadísticas de la cola                 │"))
-        print(m("│ 6. Gestión de eventos                          │"))
+        
+        if discord_queue_disponible:
+            print(m("│ 5. Ver estadísticas de la cola                 │"))
+            print(m("│ 6. Gestión de eventos                          │"))
+        else:
+            print(m("│ 5. [Sistema de cola no disponible]            │"))
+            print(m("│ 6. [Sistema de cola no disponible]            │"))
+        
         print(m("│ 7. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
         
@@ -207,9 +218,17 @@ def menu_principal_discord():
             elif seleccion == 4:
                 _mostrar_comando_sugerido_wrapper()
             elif seleccion == 5:
-                mostrar_estadisticas_cola()
+                if discord_queue_disponible:
+                    mostrar_estadisticas_cola()
+                else:
+                    print(amarillo("\n⚠ Sistema de cola no disponible"))
+                    utils.pausar()
             elif seleccion == 6:
-                menu_gestion_eventos()
+                if discord_queue_disponible:
+                    menu_gestion_eventos()
+                else:
+                    print(amarillo("\n⚠ Sistema de cola no disponible"))
+                    utils.pausar()
             elif seleccion == 7:
                 break
             else:
@@ -269,7 +288,6 @@ def mostrar_info_bot():
     
     print(m("─" * 50))
     
-    # Abrir navegador
     if utils.confirmar("\n¿Abrir enlace de invitación en navegador?"):
         try:
             import webbrowser
@@ -297,7 +315,6 @@ def configurar_integracion_completa():
         utils.pausar()
         return
     
-    # Paso 1: User ID
     print("\n" + m("─" * 50))
     print(mb("PASO 1/2 - Discord User ID"))
     print(m("─" * 50) + "\n")
@@ -317,7 +334,6 @@ def configurar_integracion_completa():
         utils.pausar()
         return
     
-
     config.set("discord_user_id", user_id)
     print(verde(f"\n✓ User ID guardado: {user_id}"))
     
@@ -328,7 +344,7 @@ def configurar_integracion_completa():
     webhook_actual = os.getenv("DISCORD_WEBHOOK_URL", "")
     if webhook_actual:
         print(f"Webhook actual: {webhook_actual}\n")
-        if not utils.confirmar("¿Cambiar webhook URL? (no recomendado cambiar, solamente dar a si) "):
+        if not utils.confirmar("¿Cambiar webhook URL?"):
             webhook_url = webhook_actual
         else:
             webhook_url = _solicitar_webhook_url()
@@ -342,7 +358,6 @@ def configurar_integracion_completa():
         utils.pausar()
         return
     
-    # Configurar variables de entorno permanentemente
     print("\n" + m("─" * 50))
     print(mb("APLICANDO CONFIGURACIÓN"))
     print(m("─" * 50) + "\n")
@@ -364,7 +379,6 @@ def configurar_integracion_completa():
         print(verde("✓ Sistema de cola iniciado"))
         logger.log("INFO", f"Integración Discord configurada - User ID: {user_id}")
         
-        # AUTO-CONFIGURACIÓN DEL SERVIDOR WEB
         _auto_configurar_web_server()
         
     else:
@@ -377,7 +391,6 @@ def configurar_integracion_completa():
 
 
 def _solicitar_user_id():
-    """Solicita el Discord User ID al usuario"""
     print("Cómo obtener tu Discord User ID:")
     print("  1. Abre Discord")
     print("  2. Configuración → Avanzado → Modo Desarrollador (activar)")
@@ -401,7 +414,6 @@ def _solicitar_user_id():
 def _solicitar_webhook_url():
     print("Detectando URL del bot...\n")
     
-    # Detectar automáticamente
     webhook_url = _detectar_webhook_url()
     
     if webhook_url:
@@ -418,7 +430,6 @@ def _solicitar_webhook_url():
         if not webhook_manual:
             return None
         
-        # Validación básica
         if not (webhook_manual.startswith("http://") or webhook_manual.startswith("https://")):
             print(f"{AMARILLO}\n⚠ URL debe comenzar con http:// o https://{RESET}")
             if utils.confirmar("¿Continuar de todas formas?"):
@@ -429,7 +440,6 @@ def _solicitar_webhook_url():
 
 
 def _detectar_webhook_url():
-    # Detectar Render
     render_service = os.getenv("RENDER_SERVICE_NAME")
     render_external_url = os.getenv("RENDER_EXTERNAL_URL")
     
@@ -438,7 +448,6 @@ def _detectar_webhook_url():
     elif render_service:
         return f"https://{render_service}.onrender.com/webhook/megacmd"
     
-    # Detectar Railway
     railway_static_url = os.getenv("RAILWAY_STATIC_URL")
     railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
     
@@ -447,7 +456,6 @@ def _detectar_webhook_url():
     elif railway_static_url:
         return f"{railway_static_url}/webhook/megacmd"
     
-    # Hardcoded: Render conocido (Doce-Bt)
     return "https://doce-bt.onrender.com/webhook/megacmd"
 
 
@@ -455,19 +463,16 @@ def _configurar_variables_permanentes(user_id, webhook_url):
     try:
         bashrc_path = os.path.expanduser("~/.bashrc")
         
-        # Leer contenido actual
         if os.path.exists(bashrc_path):
             with open(bashrc_path, 'r') as f:
                 contenido = f.read()
         else:
             contenido = ""
         
-        # Verificar si ya existen las variables
         lineas = contenido.split('\n')
         tiene_user_id = any('DISCORD_USER_ID' in linea for linea in lineas)
         tiene_webhook = any('DISCORD_WEBHOOK_URL' in linea for linea in lineas)
         
-        # Preparar nuevas líneas
         nuevas_lineas = []
         
         if not tiene_user_id:
@@ -476,7 +481,6 @@ def _configurar_variables_permanentes(user_id, webhook_url):
         if not tiene_webhook:
             nuevas_lineas.append(f'export DISCORD_WEBHOOK_URL="{webhook_url}"')
         
-        # Si hay algo que agregar
         if nuevas_lineas:
             with open(bashrc_path, 'a') as f:
                 f.write("\n# d0ce3|tools Discord Integration\n")
@@ -487,7 +491,6 @@ def _configurar_variables_permanentes(user_id, webhook_url):
         else:
             print(f"{AMARILLO}⚠ Variables ya existen en ~/.bashrc{RESET}")
         
-        # Exportar en la sesión actual
         os.environ["DISCORD_USER_ID"] = user_id
         os.environ["DISCORD_WEBHOOK_URL"] = webhook_url
         
@@ -502,7 +505,6 @@ def _configurar_variables_permanentes(user_id, webhook_url):
 
 
 def mostrar_estadisticas_cola():
-    """Muestra estadísticas detalladas de la cola de eventos"""
     utils.limpiar_pantalla()
     
     print("\n" + m("─" * 50))
@@ -510,7 +512,15 @@ def mostrar_estadisticas_cola():
     print(m("─" * 50) + "\n")
     
     try:
-        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        discord_queue = _cargar_discord_queue()
+        
+        if discord_queue is None:
+            print(rojo("✗ Sistema de cola no disponible\n"))
+            print("El módulo discord_queue no se pudo cargar.")
+            print("Esto puede deberse a problemas de empaquetado.\n")
+            utils.pausar()
+            return
+        
         stats = discord_queue.queue_instance.get_stats()
         
         print(mb("Eventos:"))
@@ -527,7 +537,6 @@ def mostrar_estadisticas_cola():
             print(rojo(f"✗ {stats['failed']} evento(s) fallaron después de 3 intentos"))
             print("  Usa 'Gestión de eventos' para revisar y reintentar.\n")
         
-        # Información adicional
         print(mb("Base de datos:"))
         workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
         db_path = os.path.join(workspace, ".discord_events.db")
@@ -555,19 +564,22 @@ def menu_gestion_eventos():
         print(mb("GESTIÓN DE EVENTOS"))
         print(m("─" * 50))
         
-        try:
-            discord_queue = CloudModuleLoader.load_module("discord_queue")
-            stats = discord_queue.queue_instance.get_stats()
-            
-            print(f"\nPendientes: {amarillo(str(stats['pending']))}")
-            print(f"Fallidos:   {rojo(str(stats['failed']))}\n")
-        except:
-            print(rojo("\n✗ Error al cargar estadísticas\n"))
+        discord_queue = _cargar_discord_queue()
+        
+        if discord_queue:
+            try:
+                stats = discord_queue.queue_instance.get_stats()
+                print(f"\nPendientes: {amarillo(str(stats['pending']))}")
+                print(f"Fallidos:   {rojo(str(stats['failed']))}\n")
+            except:
+                print(rojo("\n✗ Error al cargar estadísticas\n"))
+        else:
+            print(amarillo("\n⚠ Sistema de cola no disponible\n"))
         
         print(m("┌────────────────────────────────────────────────┐"))
         print(m("│ 1. Ver eventos fallidos                        │"))
         print(m("│ 2. Reintentar evento fallido                   │"))
-        print(m("│ 3. Limpiar eventos antiguos (7+ días)          │"))
+        print(m("│ 3. Limpiar eventos antiguos (7+ días)         │"))
         print(m("│ 4. Ver todos los eventos pendientes            │"))
         print(m("│ 5. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
@@ -605,7 +617,6 @@ def menu_gestion_eventos():
 
 
 def _ver_eventos_fallidos():
-    """Muestra eventos que fallaron"""
     utils.limpiar_pantalla()
     
     print("\n" + m("─" * 50))
@@ -613,7 +624,13 @@ def _ver_eventos_fallidos():
     print(m("─" * 50) + "\n")
     
     try:
-        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        discord_queue = _cargar_discord_queue()
+        
+        if discord_queue is None:
+            print(rojo("✗ Sistema de cola no disponible\n"))
+            utils.pausar()
+            return
+        
         eventos = discord_queue.queue_instance.get_failed_events()
         
         if not eventos:
@@ -636,6 +653,13 @@ def _ver_eventos_fallidos():
 
 def _reintentar_evento():
     try:
+        discord_queue = _cargar_discord_queue()
+        
+        if discord_queue is None:
+            print(rojo("\n✗ Sistema de cola no disponible"))
+            utils.pausar()
+            return
+        
         event_id = input(m("ID del evento a reintentar: ")).strip()
         
         if not event_id or not event_id.isdigit():
@@ -643,7 +667,6 @@ def _reintentar_evento():
             utils.pausar()
             return
         
-        discord_queue = CloudModuleLoader.load_module("discord_queue")
         discord_queue.queue_instance.retry_failed_event(int(event_id))
         
         print(verde(f"\n✓ Evento {event_id} marcado para reintentar"))
@@ -666,7 +689,13 @@ def _limpiar_eventos_antiguos():
         return
     
     try:
-        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        discord_queue = _cargar_discord_queue()
+        
+        if discord_queue is None:
+            print(rojo("\n✗ Sistema de cola no disponible"))
+            utils.pausar()
+            return
+        
         eliminados = discord_queue.queue_instance.cleanup_old_events(days=7)
         
         print(verde(f"\n✓ {eliminados} evento(s) eliminado(s)"))
@@ -679,7 +708,6 @@ def _limpiar_eventos_antiguos():
 
 
 def _ver_eventos_pendientes():
-    """Muestra eventos pendientes"""
     utils.limpiar_pantalla()
     
     print("\n" + m("─" * 50))
@@ -687,7 +715,13 @@ def _ver_eventos_pendientes():
     print(m("─" * 50) + "\n")
     
     try:
-        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        discord_queue = _cargar_discord_queue()
+        
+        if discord_queue is None:
+            print(rojo("✗ Sistema de cola no disponible\n"))
+            utils.pausar()
+            return
+        
         eventos = discord_queue.queue_instance.get_pending_events(limit=20)
         
         if not eventos:
@@ -733,7 +767,6 @@ def _mostrar_comando_sugerido_wrapper():
         utils.pausar()
 
 
-# Funciones exportadas
 __all__ = [
     'menu_principal_discord',
     'mostrar_info_bot',
