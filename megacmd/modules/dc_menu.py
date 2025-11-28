@@ -36,50 +36,100 @@ def azul(texto):
 
 
 def _auto_configurar_web_server():
-    workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
-    addon_path = f"{workspace}/d0ce3-Addons"
-    sh_path = os.path.join(addon_path, "start_web_server.sh")
+    work_dir = os.path.expanduser("~/.d0ce3_addons")
+    os.makedirs(work_dir, exist_ok=True)
+    
+    sh_path = os.path.join(work_dir, "start_web_server.sh")
+    webserver_path = os.path.join(work_dir, "web_server.py")
     bashrc_path = os.path.expanduser("~/.bashrc")
-    bashrc_line = f"cd {addon_path} && nohup bash start_web_server.sh > /tmp/web_server.log 2>&1 &"
+    bashrc_line = f"[ -f '{sh_path}' ] && nohup bash {sh_path} > /tmp/web_server.log 2>&1 &"
 
     print("\n" + m("─" * 50))
     print(mb("CONFIGURANDO SERVIDOR WEB DE CONTROL"))
     print(m("─" * 50) + "\n")
+    print(f"📂 Instalando en: {work_dir}\n")
 
     try:
-        if not os.path.exists(sh_path):
-            print("📝 Creando start_web_server.sh...")
-            with open(sh_path, "w") as f:
-                f.write("""#!/bin/bash
-echo "========================================="
-echo "🚀 Iniciando servidor web de control"
-echo "========================================="
+        print("📝 Creando web_server.py...")
+        with open(webserver_path, "w") as f:
+            f.write('''#!/usr/bin/env python3
+from flask import Flask, request, jsonify
+import subprocess
+import os
+
+app = Flask(__name__)
+PORT = int(os.getenv('PORT', 8080))
+AUTH_TOKEN = os.getenv('WEB_SERVER_AUTH_TOKEN', 'default_token')
+
+@app.route('/minecraft/start', methods=['POST'])
+def minecraft_start():
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token != AUTH_TOKEN:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    try:
+        result = subprocess.run(['screen', '-S', 'minecraft', '-X', 'stuff', 'start^M'],
+                              capture_output=True, text=True, timeout=5)
+        return jsonify({'status': 'success', 'message': 'Comando enviado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/minecraft/stop', methods=['POST'])
+def minecraft_stop():
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token != AUTH_TOKEN:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    try:
+        result = subprocess.run(['screen', '-S', 'minecraft', '-X', 'stuff', 'stop^M'],
+                              capture_output=True, text=True, timeout=5)
+        return jsonify({'status': 'success', 'message': 'Comando enviado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/minecraft/status', methods=['GET'])
+def minecraft_status():
+    try:
+        result = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
+        running = 'minecraft' in result.stdout
+        return jsonify({'running': running})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'})
+
+if __name__ == '__main__':
+    print(f"Servidor escuchando en puerto {PORT}")
+    print(f"Token de autenticación: {AUTH_TOKEN[:8]}...")
+    app.run(host='0.0.0.0', port=PORT)
+''')
+        os.chmod(webserver_path, 0o755)
+        print(verde("✓ web_server.py creado"))
+
+        print("📝 Creando start_web_server.sh...")
+        with open(sh_path, "w") as f:
+            f.write(f'''#!/bin/bash
+WORK_DIR="{work_dir}"
+cd "$WORK_DIR"
 
 if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
     export WEB_SERVER_AUTH_TOKEN=$(openssl rand -hex 32)
-    echo "🔑 Token generado: $WEB_SERVER_AUTH_TOKEN"
 fi
 
-PORT=${PORT:-8080}
-echo "📡 Puerto: $PORT"
-
-cd "$(dirname "$0")"
+PORT=${{PORT:-8080}}
 
 if ! python3 -c "import flask" 2>/dev/null; then
-    echo "📦 Instalando Flask..."
-    pip3 install flask
+    pip3 install flask >/dev/null 2>&1
 fi
 
-nohup python3 web_server.py > /tmp/web_server.log 2>&1 &
+nohup python3 "$WORK_DIR/web_server.py" > /tmp/web_server.log 2>&1 &
 
-echo "✅ Servidor web iniciado en segundo plano"
-echo "📋 Logs en: /tmp/web_server.log"
-echo "========================================="
-""")
-            os.chmod(sh_path, 0o755)
-            print(verde("✓ start_web_server.sh creado"))
-        else:
-            print(verde("✓ start_web_server.sh ya existe"))
+echo "✅ Servidor web iniciado (puerto $PORT)"
+''')
+        os.chmod(sh_path, 0o755)
+        print(verde("✓ start_web_server.sh creado"))
 
         if os.path.exists(bashrc_path):
             with open(bashrc_path, "r") as f:
@@ -88,11 +138,10 @@ echo "========================================="
             if bashrc_line not in bashrc_content:
                 print("\n📝 Agregando inicio automático a ~/.bashrc...")
                 with open(bashrc_path, "a") as f:
-                    f.write("\n# Servidor web de control Minecraft (d0ce3-Addons)\n")
-                    f.write(bashrc_line + "\n")
-                print(verde("✓ Agregado a ~/.bashrc para arranque automático"))
+                    f.write(f"\n# d0ce3-Addons auto-start\n{bashrc_line}\n")
+                print(verde("✓ Agregado a ~/.bashrc"))
             else:
-                print(verde("✓ Ya está configurado en ~/.bashrc"))
+                print(verde("✓ Ya configurado en ~/.bashrc"))
         
         print("\n📦 Verificando Flask...")
         try:
@@ -104,38 +153,30 @@ echo "========================================="
                                        stdout=subprocess.DEVNULL,
                                        stderr=subprocess.DEVNULL)
             if resultado == 0:
-                print(verde("✓ Flask instalado correctamente"))
+                print(verde("✓ Flask instalado"))
             else:
-                print(amarillo("⚠ No se pudo instalar Flask automáticamente"))
-                print("  Instálalo manualmente: pip3 install flask")
+                print(amarillo("⚠ Instálalo manualmente: pip3 install flask"))
 
         print("\n🚀 Iniciando servidor web...")
+        subprocess.Popen(['bash', sh_path])
+        
+        print(verde("\n✓ Servidor web configurado e iniciado"))
+        print(verde("✓ Se iniciará automáticamente en futuros arranques"))
+        print(f"\n📂 Archivos en: {work_dir}")
+        print("⭐ Ya puedes usar /minecraft_start desde Discord")
+        print("\n💡 Puerto: 8080")
+        print("📋 Logs: tail -f /tmp/web_server.log")
+        
         try:
-            subprocess.Popen(['bash', sh_path],
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
-            print(verde("\n✓ Servidor web de control iniciado en segundo plano"))
-            print(verde("✓ Se iniciará automáticamente en futuros arranques"))
-            print("\n⭐ Ya puedes usar /minecraft_start desde Discord")
-            print("\n💡 El servidor escucha en puerto 8080")
-            print("📋 Ver logs: tail -f /tmp/web_server.log")
+            if logger and hasattr(logger, 'info'):
+                logger.info(f"Servidor web instalado en {work_dir}")
+        except:
+            pass
             
-            try:
-                if logger and hasattr(logger, 'info'):
-                    logger.info("Servidor web de control iniciado automáticamente")
-            except:
-                pass
-            
-        except Exception as e:
-            print(rojo(f"\n✗ Error al iniciar el servidor web: {e}"))
-            print(f"\n💡 Puedes iniciarlo manualmente con:")
-            print(f"   bash {sh_path}")
-    
     except Exception as e:
-        print(rojo(f"\n✗ Error en configuración automática: {e}"))
-        print("\n💡 Configuración manual necesaria:")
-        print(f"   1. Navega a: {addon_path}")
-        print(f"   2. Ejecuta: bash start_web_server.sh")
+        print(rojo(f"\n✗ Error: {e}"))
+        import traceback
+        print(traceback.format_exc())
 
 
 def _cargar_discord_queue():
@@ -342,7 +383,7 @@ def configurar_integracion_completa():
     webhook_actual = os.getenv("DISCORD_WEBHOOK_URL", "")
     if webhook_actual:
         print(f"Webhook actual: {webhook_actual}\n")
-        if not utils.confirmar("¿Cambiar webhook URL?"):
+        if not utils.confirmar("¿Cambiar webhook URL? (no recomendado cambiar) "):
             webhook_url = webhook_actual
         else:
             webhook_url = _solicitar_webhook_url()
