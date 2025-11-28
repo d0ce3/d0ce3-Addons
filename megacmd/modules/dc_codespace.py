@@ -1,5 +1,6 @@
 import os
 import subprocess
+import json
 
 utils = CloudModuleLoader.load_module("utils")
 config = CloudModuleLoader.load_module("config")
@@ -22,44 +23,187 @@ def obtener_nombre_codespace():
     return None
 
 
-def obtener_ip_codespace():
+def leer_configuracion_msx():
     """
-    Obtiene la IP pública del Codespace
+    Lee el archivo configuracion.json de MSX
     
     Returns:
-        str: IP pública o None si no se puede obtener
+        dict: Configuración de MSX o None si no existe
+    """
+    workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
+    config_path = os.path.join(workspace, "configuracion.json")
+    
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                configuracion = json.load(f)
+            utils.logger.info(f"Configuración MSX cargada: servicio={configuracion.get('servicio_a_usar')}")
+            return configuracion
+        else:
+            utils.logger.warning(f"Archivo configuracion.json no encontrado en {config_path}")
+            return None
+    except Exception as e:
+        utils.logger.error(f"Error leyendo configuracion.json: {e}")
+        return None
+
+
+def obtener_ip_desde_playit():
+    """
+    Obtiene la IP desde el archivo de configuración de playit
+    
+    Returns:
+        str: IP de playit o None
     """
     try:
+        # Buscar archivo de configuración de playit
+        workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
+        playit_config = os.path.join(workspace, ".playit", "config.toml")
+        
+        if os.path.exists(playit_config):
+            with open(playit_config, 'r') as f:
+                contenido = f.read()
+            
+            # Buscar la IP en el archivo
+            for line in contenido.split('\n'):
+                if 'address' in line.lower() or 'tunnel' in line.lower():
+                    # Extraer IP del formato: address = "ip:puerto"
+                    if '"' in line:
+                        partes = line.split('"')
+                        if len(partes) >= 2:
+                            ip_completa = partes[1]
+                            utils.logger.info(f"IP de playit encontrada: {ip_completa}")
+                            return ip_completa
+        
+        # Si no se encuentra en config, intentar desde el proceso
         result = subprocess.run(
-            ["curl", "-s", "ifconfig.me"],
+            ["ps", "aux"],
             capture_output=True,
             text=True,
             timeout=5
         )
         
-        if result.returncode == 0 and result.stdout.strip():
-            ip = result.stdout.strip()
-            utils.logger.info(f"IP pública obtenida: {ip}")
-            return ip
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if 'playit' in line.lower():
+                    # Intentar extraer IP del comando
+                    utils.logger.info("Proceso playit detectado")
+                    break
         
-        # Alternativa: usar ipify
-        result = subprocess.run(
-            ["curl", "-s", "https://api.ipify.org"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        if result.returncode == 0 and result.stdout.strip():
-            ip = result.stdout.strip()
-            utils.logger.info(f"IP pública obtenida (ipify): {ip}")
-            return ip
-        
-        utils.logger.warning("No se pudo obtener IP pública")
+        utils.logger.warning("No se pudo obtener IP de playit")
         return None
         
     except Exception as e:
-        utils.logger.error(f"Error obteniendo IP: {e}")
+        utils.logger.error(f"Error obteniendo IP de playit: {e}")
+        return None
+
+
+def obtener_ip_desde_tailscale():
+    """
+    Obtiene la IP desde tailscale
+    
+    Returns:
+        str: IP de tailscale o None
+    """
+    try:
+        result = subprocess.run(
+            ["tailscale", "ip"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            ip = result.stdout.strip().split('\n')[0]  # Primera IP
+            utils.logger.info(f"IP de tailscale obtenida: {ip}")
+            return ip
+        
+        utils.logger.warning("No se pudo obtener IP de tailscale")
+        return None
+        
+    except FileNotFoundError:
+        utils.logger.warning("tailscale no instalado")
+        return None
+    except Exception as e:
+        utils.logger.error(f"Error obteniendo IP de tailscale: {e}")
+        return None
+
+
+def obtener_ip_desde_zerotier():
+    """
+    Obtiene la IP desde zerotier
+    
+    Returns:
+        str: IP de zerotier o None
+    """
+    try:
+        result = subprocess.run(
+            ["zerotier-cli", "listnetworks"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            # Parsear output de zerotier-cli
+            lineas = result.stdout.strip().split('\n')
+            for linea in lineas[1:]:  # Saltar header
+                partes = linea.split()
+                if len(partes) >= 3:
+                    # La IP suele estar en la última columna
+                    ip_candidata = partes[-1]
+                    if '.' in ip_candidata or ':' in ip_candidata:
+                        utils.logger.info(f"IP de zerotier obtenida: {ip_candidata}")
+                        return ip_candidata
+        
+        utils.logger.warning("No se pudo obtener IP de zerotier")
+        return None
+        
+    except FileNotFoundError:
+        utils.logger.warning("zerotier-cli no instalado")
+        return None
+    except Exception as e:
+        utils.logger.error(f"Error obteniendo IP de zerotier: {e}")
+        return None
+
+
+def obtener_ip_codespace():
+    """
+    Obtiene la IP correcta según el servicio configurado en MSX
+    
+    Returns:
+        str: IP del servicio configurado o None
+    """
+    # Leer configuración de MSX
+    configuracion_msx = leer_configuracion_msx()
+    
+    if not configuracion_msx:
+        utils.logger.warning("No se pudo leer configuracion.json de MSX")
+        return None
+    
+    servicio = configuracion_msx.get("servicio_a_usar", "").lower()
+    
+    if not servicio:
+        utils.logger.warning("servicio_a_usar no especificado en configuracion.json")
+        return None
+    
+    utils.logger.info(f"Servicio de túnel configurado: {servicio}")
+    
+    # Obtener IP según el servicio
+    if servicio == "playit":
+        ip = obtener_ip_desde_playit()
+    elif servicio == "tailscale":
+        ip = obtener_ip_desde_tailscale()
+    elif servicio == "zerotier":
+        ip = obtener_ip_desde_zerotier()
+    else:
+        utils.logger.warning(f"Servicio desconocido: {servicio}")
+        return None
+    
+    if ip:
+        utils.logger.info(f"IP obtenida desde {servicio}: {ip}")
+        return ip
+    else:
+        utils.logger.warning(f"No se pudo obtener IP desde {servicio}")
         return None
 
 
@@ -144,6 +288,10 @@ def generar_ip_minecraft():
     if not ip:
         return None
     
+    # Si la IP ya incluye puerto (como en playit), usar así
+    if ':' in ip:
+        return ip
+    
     # Si es puerto por defecto, no incluirlo
     if puerto == 25565:
         return ip
@@ -209,13 +357,22 @@ def mostrar_info_conexion():
     else:
         print(amarillo("⚠ Codespace no detectado"))
     
-    # IP pública
+    # Leer configuración MSX
+    print()
+    configuracion_msx = leer_configuracion_msx()
+    if configuracion_msx:
+        servicio = configuracion_msx.get("servicio_a_usar", "desconocido")
+        print(verde(f"✓ Servicio de túnel: {servicio}"))
+    else:
+        print(amarillo("⚠ configuracion.json no encontrado"))
+    
+    # IP del servicio
     print()
     ip = obtener_ip_codespace()
     if ip:
-        print(verde(f"✓ IP pública: {ip}"))
+        print(verde(f"✓ IP del servicio: {ip}"))
     else:
-        print(amarillo("⚠ No se pudo obtener IP pública"))
+        print(amarillo("⚠ No se pudo obtener IP del servicio"))
     
     # Servidor Minecraft
     print()
@@ -321,7 +478,8 @@ def mostrar_comando_sugerido():
         ip = obtener_ip_codespace()
         if ip:
             print(f"\n3. Tu IP actual: {ip}")
-            print(f"   Prueba: /minecraft_start ip:{ip}:25565")
+            if ':' not in ip:
+                print(f"   Prueba: /minecraft_start ip:{ip}:25565")
     
     print("\n" + m("─" * 50))
     utils.pausar()
@@ -402,7 +560,11 @@ def obtener_uso_recursos():
 # Funciones exportadas
 __all__ = [
     'obtener_nombre_codespace',
+    'leer_configuracion_msx',
     'obtener_ip_codespace',
+    'obtener_ip_desde_playit',
+    'obtener_ip_desde_tailscale',
+    'obtener_ip_desde_zerotier',
     'obtener_puertos_abiertos',
     'detectar_servidor_minecraft',
     'generar_ip_minecraft',
