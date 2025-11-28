@@ -10,12 +10,15 @@ DISCORD_BOT_INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1331828
 
 utils = CloudModuleLoader.load_module("utils")
 config = CloudModuleLoader.load_module("config")
+logger = CloudModuleLoader.load_module("logger")
 
 # Colores del tema (mismo que menu.py)
 MORADO = "\033[95m"
 VERDE = "\033[92m"
 ROJO = "\033[91m"
 AMARILLO = "\033[93m"
+AZUL = "\033[94m"
+CIAN = "\033[96m"
 RESET = "\033[0m"
 BOLD = "\033[1m"
 
@@ -35,6 +38,14 @@ def rojo(texto):
     """Texto en rojo"""
     return f"{ROJO}{texto}{RESET}"
 
+def amarillo(texto):
+    """Texto en amarillo"""
+    return f"{AMARILLO}{texto}{RESET}"
+
+def azul(texto):
+    """Texto en azul"""
+    return f"{AZUL}{texto}{RESET}"
+
 
 def menu_principal_discord():
     """Menú principal unificado para Discord"""
@@ -49,8 +60,18 @@ def menu_principal_discord():
         user_id = config.CONFIG.get("discord_user_id") or os.getenv("DISCORD_USER_ID")
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
         
+        # Verificar estado de la cola
+        try:
+            discord_queue = CloudModuleLoader.load_module("discord_queue")
+            stats = discord_queue.queue_instance.get_stats()
+            eventos_pendientes = stats.get('pending', 0)
+        except:
+            eventos_pendientes = 0
+        
         if user_id and webhook_url:
             print(verde("\n✓ Configuración completa"))
+            if eventos_pendientes > 0:
+                print(amarillo(f"  ⚠ {eventos_pendientes} evento(s) pendiente(s)"))
         elif user_id or webhook_url:
             print(f"{AMARILLO}\n⚠ Configuración incompleta{RESET}")
         else:
@@ -62,7 +83,9 @@ def menu_principal_discord():
         print(m("│ 2. Configurar integración                      │"))
         print(m("│ 3. Ver información de conexión                 │"))
         print(m("│ 4. Comando sugerido para Discord               │"))
-        print(m("│ 5. Volver                                      │"))
+        print(m("│ 5. Ver estadísticas de la cola                 │"))
+        print(m("│ 6. Gestión de eventos                          │"))
+        print(m("│ 7. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
         
         print()
@@ -84,6 +107,10 @@ def menu_principal_discord():
             elif seleccion == 4:
                 _mostrar_comando_sugerido_wrapper()
             elif seleccion == 5:
+                mostrar_estadisticas_cola()
+            elif seleccion == 6:
+                menu_gestion_eventos()
+            elif seleccion == 7:
                 break
             else:
                 print(f"{AMARILLO}Opción inválida{RESET}")
@@ -111,8 +138,10 @@ def mostrar_info_bot():
     print(mb("Características:"))
     print("  • Iniciar/Detener Codespace desde Discord")
     print("  • Monitoreo automático de servidor Minecraft")
-    print("  • Notificaciones de errores en backups")
-    print("  • Sistema de permisos multiusuario\n")
+    print("  • Notificaciones de backups (éxito/error)")
+    print("  • Sistema de permisos multiusuario")
+    print("  • Sistema de cola de eventos")
+    print("  • Polling cada 30 segundos\n")
     
     print(mb("Enlace de invitación:"))
     print(f"  {DISCORD_BOT_INVITE_URL}\n")
@@ -127,10 +156,17 @@ def mostrar_info_bot():
     print("\n  Control:")
     print("    /start, /stop, /status")
     print("\n  Minecraft:")
-    print("    /minecraft_start [ip]")
-    print("    /minecraft_status <ip>")
+    print("    /mc_start, /mc_stop, /mc_status")
     print("\n  Configuración:")
-    print("    /setup, /vincular, /permitir, /info\n")
+    print("    /setup, /vincular, /refrescar")
+    print("\n  Eventos:")
+    print("    /addon_stats - Ver estadísticas del sistema\n")
+    
+    print(mb("Integración:"))
+    print("  • Sistema de cola SQLite local")
+    print("  • Exposición vía HTTP (puerto 8080)")
+    print("  • El bot hace polling cada 30 segundos")
+    print("  • Notificaciones automáticas por DM\n")
     
     print(m("─" * 50))
     
@@ -228,7 +264,8 @@ def configurar_integracion_completa():
         print(f"  Webhook: {webhook_url}\n")
         
         print(verde("✓ Notificaciones de backup activadas"))
-        utils.logger.info(f"Integración Discord configurada - User ID: {user_id}")
+        print(verde("✓ Sistema de cola iniciado"))
+        logger.log("INFO", f"Integración Discord configurada - User ID: {user_id}")
     else:
         print(f"{AMARILLO}\n⚠ Configuración parcial{RESET}")
         print("Deberás exportar manualmente las variables:")
@@ -319,7 +356,6 @@ def _detectar_webhook_url():
         return f"{railway_static_url}/webhook/megacmd"
     
     # Hardcoded: Render conocido (Doce-Bt)
-    # Esto funciona si el bot está en render.com con el nombre "Doce-Bt"
     return "https://doce-bt.onrender.com/webhook/megacmd"
 
 
@@ -370,8 +406,217 @@ def _configurar_variables_permanentes(user_id, webhook_url):
         
     except Exception as e:
         print(rojo(f"\n✗ Error configurando variables: {e}"))
-        utils.logger.error(f"Error configurando variables permanentes: {e}")
+        logger.log("ERROR", f"Error configurando variables permanentes: {e}")
         return False
+
+
+def mostrar_estadisticas_cola():
+    """Muestra estadísticas detalladas de la cola de eventos"""
+    utils.limpiar_pantalla()
+    
+    print("\n" + m("─" * 50))
+    print(mb("ESTADÍSTICAS DE LA COLA DE EVENTOS"))
+    print(m("─" * 50) + "\n")
+    
+    try:
+        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        stats = discord_queue.queue_instance.get_stats()
+        
+        print(mb("Eventos:"))
+        print(f"  Total:      {stats['total']}")
+        print(f"  Pendientes: {amarillo(str(stats['pending']))}")
+        print(f"  Procesados: {verde(str(stats['processed']))}")
+        print(f"  Fallidos:   {rojo(str(stats['failed']))}\n")
+        
+        if stats['pending'] > 0:
+            print(amarillo(f"⚠ Hay {stats['pending']} evento(s) esperando ser procesados"))
+            print("  El bot de Discord debe estar online para procesarlos.\n")
+        
+        if stats['failed'] > 0:
+            print(rojo(f"✗ {stats['failed']} evento(s) fallaron después de 3 intentos"))
+            print("  Usa 'Gestión de eventos' para revisar y reintentar.\n")
+        
+        # Información adicional
+        print(mb("Base de datos:"))
+        workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
+        db_path = os.path.join(workspace, ".discord_events.db")
+        
+        if os.path.exists(db_path):
+            size_bytes = os.path.getsize(db_path)
+            size_kb = size_bytes / 1024
+            print(f"  Ubicación: {db_path}")
+            print(f"  Tamaño:    {size_kb:.2f} KB\n")
+        else:
+            print(rojo("  ✗ Base de datos no encontrada\n"))
+        
+    except Exception as e:
+        print(rojo(f"✗ Error obteniendo estadísticas: {e}\n"))
+        logger.log("ERROR", f"Error en estadísticas de cola: {e}")
+    
+    utils.pausar()
+
+
+def menu_gestion_eventos():
+    """Menú para gestionar eventos de la cola"""
+    while True:
+        utils.limpiar_pantalla()
+        
+        print("\n" + m("─" * 50))
+        print(mb("GESTIÓN DE EVENTOS"))
+        print(m("─" * 50))
+        
+        try:
+            discord_queue = CloudModuleLoader.load_module("discord_queue")
+            stats = discord_queue.queue_instance.get_stats()
+            
+            print(f"\nPendientes: {amarillo(str(stats['pending']))}")
+            print(f"Fallidos:   {rojo(str(stats['failed']))}\n")
+        except:
+            print(rojo("\n✗ Error al cargar estadísticas\n"))
+        
+        print(m("┌────────────────────────────────────────────────┐"))
+        print(m("│ 1. Ver eventos fallidos                        │"))
+        print(m("│ 2. Reintentar evento fallido                   │"))
+        print(m("│ 3. Limpiar eventos antiguos (7+ días)         │"))
+        print(m("│ 4. Ver todos los eventos pendientes            │"))
+        print(m("│ 5. Volver                                      │"))
+        print(m("└────────────────────────────────────────────────┘"))
+        
+        print()
+        
+        try:
+            seleccion = input(m("Opción: ")).strip()
+            
+            if not seleccion:
+                break
+            
+            seleccion = int(seleccion)
+            
+            if seleccion == 1:
+                _ver_eventos_fallidos()
+            elif seleccion == 2:
+                _reintentar_evento()
+            elif seleccion == 3:
+                _limpiar_eventos_antiguos()
+            elif seleccion == 4:
+                _ver_eventos_pendientes()
+            elif seleccion == 5:
+                break
+            else:
+                print(f"{AMARILLO}Opción inválida{RESET}")
+                utils.pausar()
+                
+        except ValueError:
+            print(f"{AMARILLO}Ingresa un número válido{RESET}")
+            utils.pausar()
+        except KeyboardInterrupt:
+            print("\n")
+            break
+
+
+def _ver_eventos_fallidos():
+    """Muestra eventos que fallaron"""
+    utils.limpiar_pantalla()
+    
+    print("\n" + m("─" * 50))
+    print(mb("EVENTOS FALLIDOS"))
+    print(m("─" * 50) + "\n")
+    
+    try:
+        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        eventos = discord_queue.queue_instance.get_failed_events()
+        
+        if not eventos:
+            print(verde("✓ No hay eventos fallidos\n"))
+        else:
+            for i, evento in enumerate(eventos, 1):
+                print(f"{i}. ID: {evento['id']}")
+                print(f"   Tipo: {evento['event_type']}")
+                print(f"   Usuario: {evento['user_id']}")
+                print(f"   Intentos: {evento['attempts']}")
+                if evento['error_message']:
+                    print(f"   Error: {rojo(evento['error_message'])}")
+                print()
+    
+    except Exception as e:
+        print(rojo(f"✗ Error: {e}\n"))
+    
+    utils.pausar()
+
+
+def _reintentar_evento():
+    """Reintenta un evento fallido"""
+    try:
+        event_id = input(m("ID del evento a reintentar: ")).strip()
+        
+        if not event_id or not event_id.isdigit():
+            print(rojo("\n✗ ID inválido"))
+            utils.pausar()
+            return
+        
+        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        discord_queue.queue_instance.retry_failed_event(int(event_id))
+        
+        print(verde(f"\n✓ Evento {event_id} marcado para reintentar"))
+        logger.log("INFO", f"Evento {event_id} reintentado manualmente")
+    
+    except Exception as e:
+        print(rojo(f"\n✗ Error: {e}"))
+    
+    utils.pausar()
+
+
+def _limpiar_eventos_antiguos():
+    """Limpia eventos procesados antiguos"""
+    print("\n" + m("─" * 50))
+    print(mb("LIMPIAR EVENTOS ANTIGUOS"))
+    print(m("─" * 50) + "\n")
+    
+    print("Esto eliminará eventos procesados con más de 7 días.\n")
+    
+    if not utils.confirmar("¿Continuar?"):
+        return
+    
+    try:
+        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        eliminados = discord_queue.queue_instance.cleanup_old_events(days=7)
+        
+        print(verde(f"\n✓ {eliminados} evento(s) eliminado(s)"))
+        logger.log("INFO", f"Limpieza de eventos: {eliminados} eliminados")
+    
+    except Exception as e:
+        print(rojo(f"\n✗ Error: {e}"))
+    
+    utils.pausar()
+
+
+def _ver_eventos_pendientes():
+    """Muestra eventos pendientes"""
+    utils.limpiar_pantalla()
+    
+    print("\n" + m("─" * 50))
+    print(mb("EVENTOS PENDIENTES"))
+    print(m("─" * 50) + "\n")
+    
+    try:
+        discord_queue = CloudModuleLoader.load_module("discord_queue")
+        eventos = discord_queue.queue_instance.get_pending_events(limit=20)
+        
+        if not eventos:
+            print(verde("✓ No hay eventos pendientes\n"))
+        else:
+            for i, evento in enumerate(eventos, 1):
+                print(f"{i}. ID: {evento['id']}")
+                print(f"   Tipo: {evento['event_type']}")
+                print(f"   Usuario: {evento['user_id']}")
+                print(f"   Creado: {evento['created_at']}")
+                print(f"   Intentos: {evento['attempts']}")
+                print()
+    
+    except Exception as e:
+        print(rojo(f"✗ Error: {e}\n"))
+    
+    utils.pausar()
 
 
 def _mostrar_info_conexion_wrapper():
@@ -407,5 +652,7 @@ __all__ = [
     'menu_principal_discord',
     'mostrar_info_bot',
     'configurar_integracion_completa',
+    'mostrar_estadisticas_cola',
+    'menu_gestion_eventos',
     'DISCORD_BOT_INVITE_URL'
 ]
