@@ -83,50 +83,60 @@ class TimerManager:
         except:
             pass
 
-
 def _actualizar_configuracion_msx(activar=True):
-    """
-    Actualiza el archivo configuracion.json de MSX
-    - Desactiva backup_mode ("luna" -> "")
-    - Actualiza backup_auto según el estado
-    
-    Args:
-        activar: True para activar autobackup, False para desactivar
-    """
     workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
     config_path = os.path.join(workspace, "configuracion.json")
+    backup_mode_cache = os.path.join(config.BASE_DIR, ".backup_mode_original")
     
     try:
         if not os.path.exists(config_path):
             utils.logger.warning(f"configuracion.json no encontrado en {config_path}")
             return False
         
-        # Leer configuración actual
         with open(config_path, 'r') as f:
             configuracion_msx = json.load(f)
         
-        # Guardar valores anteriores para el log
         backup_mode_anterior = configuracion_msx.get('backup_mode', '')
         backup_auto_anterior = configuracion_msx.get('backup_auto', False)
         
         if activar:
-            # Al activar: desactivar sistema nativo
+            if backup_mode_anterior:
+                try:
+                    with open(backup_mode_cache, 'w') as f:
+                        f.write(backup_mode_anterior)
+                    utils.logger.info(f"Guardado backup_mode original: '{backup_mode_anterior}'")
+                except Exception as e:
+                    utils.logger.warning(f"No se pudo guardar backup_mode: {e}")
+            
             configuracion_msx['backup_mode'] = ""
             configuracion_msx['backup_auto'] = True
             
-            utils.logger.info(f"Desactivando backup nativo de MSX (era: {backup_mode_anterior})")
+            utils.logger.info(f"Desactivando backup nativo de MSX (era: '{backup_mode_anterior}')")
         else:
-            # Al desactivar: mantener desactivado (el usuario debe reactivar manualmente)
             configuracion_msx['backup_auto'] = False
+            
+            if os.path.exists(backup_mode_cache):
+                try:
+                    with open(backup_mode_cache, 'r') as f:
+                        modo_original = f.read().strip()
+                    
+                    if modo_original:
+                        configuracion_msx['backup_mode'] = modo_original
+                        utils.logger.info(f"Restaurado backup_mode original: '{modo_original}'")
+                    
+                    os.remove(backup_mode_cache)
+                except Exception as e:
+                    utils.logger.warning(f"No se pudo restaurar backup_mode: {e}")
+            else:
+                utils.logger.info("No hay backup_mode guardado para restaurar")
             
             utils.logger.info("Autobackup desactivado en configuracion.json")
         
-        # Guardar cambios
         with open(config_path, 'w') as f:
-            json.dump(configuracion_msx, f, indent=2)
+            json.dump(configuracion_msx, f, separators=(',', ': '), ensure_ascii=False)
         
         utils.logger.info(
-            f"configuracion.json actualizado: "
+            f"configuracion.json actualizado (formato compacto): "
             f"backup_mode: '{backup_mode_anterior}' -> '{configuracion_msx['backup_mode']}', "
             f"backup_auto: {backup_auto_anterior} -> {configuracion_msx['backup_auto']}"
         )
@@ -135,8 +145,9 @@ def _actualizar_configuracion_msx(activar=True):
         
     except Exception as e:
         utils.logger.error(f"Error actualizando configuracion.json: {e}")
+        import traceback
+        utils.logger.error(traceback.format_exc())
         return False
-
 
 def _ejecutar_backup():
     backup_module = CloudModuleLoader.load_module("backup")
@@ -226,22 +237,18 @@ def stop_autobackup():
     return False
 
 def enable():
-    """Activa el autobackup y actualiza configuracion.json de MSX"""
     config.set("autobackup_enabled", True)
     utils.logger.info("Autobackup habilitado")
     
-    # Actualizar configuracion.json de MSX
     if _actualizar_configuracion_msx(activar=True):
         utils.logger.info("✓ Configuración MSX actualizada (backup nativo desactivado)")
     
     return start_autobackup()
 
 def disable():
-    """Desactiva el autobackup y actualiza configuracion.json de MSX"""
     config.set("autobackup_enabled", False)
     utils.logger.info("Autobackup deshabilitado")
     
-    # Actualizar configuracion.json de MSX
     if _actualizar_configuracion_msx(activar=False):
         utils.logger.info("✓ Configuración MSX actualizada")
     
