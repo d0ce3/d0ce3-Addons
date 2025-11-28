@@ -56,10 +56,67 @@ def _auto_configurar_web_server():
 from flask import Flask, request, jsonify
 import subprocess
 import os
+import glob
+import time
 
 app = Flask(__name__)
 PORT = int(os.getenv('PORT', 8080))
 AUTH_TOKEN = os.getenv('WEB_SERVER_AUTH_TOKEN', 'default_token')
+
+def find_msx_py():
+    matches = glob.glob('/workspaces/*/msx.py')
+    return matches[0] if matches else None
+
+def execute_minecraft_command(action):
+    try:
+        msx_path = find_msx_py()
+        if not msx_path:
+            return {'error': 'msx.py no encontrado'}
+        
+        repo_root = os.path.dirname(msx_path)
+        
+        if action == 'start':
+            cmd = f"cd {repo_root} && echo '1' | python3 msx.py"
+            subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            time.sleep(2)
+            
+            return {
+                'status': 'success',
+                'action': 'start',
+                'message': 'Servidor Minecraft iniciando...'
+            }
+        
+        elif action == 'stop':
+            cmd = f"cd {repo_root} && echo '2' | python3 msx.py"
+            subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            time.sleep(2)
+            
+            return {
+                'status': 'success',
+                'action': 'stop',
+                'message': 'Comando stop enviado al servidor'
+            }
+        
+        elif action == 'status':
+            java_check = subprocess.run(
+                ['pgrep', '-f', 'java.*forge.*jar'],
+                capture_output=True,
+                text=True
+            )
+            running = bool(java_check.stdout.strip())
+            pids = java_check.stdout.strip().split('\\n') if running else []
+            
+            return {
+                'status': 'success',
+                'running': running,
+                'minecraft_pids': pids if running else []
+            }
+        
+        else:
+            return {'error': f'Acción desconocida: {action}'}
+    
+    except Exception as e:
+        return {'error': str(e)}
 
 @app.route('/minecraft/start', methods=['POST'])
 def minecraft_start():
@@ -67,12 +124,10 @@ def minecraft_start():
     if token != AUTH_TOKEN:
         return jsonify({'error': 'Unauthorized'}), 401
     
-    try:
-        result = subprocess.run(['screen', '-S', 'minecraft', '-X', 'stuff', 'start^M'],
-                              capture_output=True, text=True, timeout=5)
-        return jsonify({'status': 'success', 'message': 'Comando enviado'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    result = execute_minecraft_command('start')
+    if 'error' in result:
+        return jsonify(result), 500
+    return jsonify(result)
 
 @app.route('/minecraft/stop', methods=['POST'])
 def minecraft_stop():
@@ -80,29 +135,32 @@ def minecraft_stop():
     if token != AUTH_TOKEN:
         return jsonify({'error': 'Unauthorized'}), 401
     
-    try:
-        result = subprocess.run(['screen', '-S', 'minecraft', '-X', 'stuff', 'stop^M'],
-                              capture_output=True, text=True, timeout=5)
-        return jsonify({'status': 'success', 'message': 'Comando enviado'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    result = execute_minecraft_command('stop')
+    if 'error' in result:
+        return jsonify(result), 500
+    return jsonify(result)
 
 @app.route('/minecraft/status', methods=['GET'])
 def minecraft_status():
-    try:
-        result = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
-        running = 'minecraft' in result.stdout
-        return jsonify({'running': running})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    result = execute_minecraft_command('status')
+    return jsonify(result)
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok'})
+    msx_path = find_msx_py()
+    return jsonify({
+        'status': 'ok',
+        'port': PORT,
+        'msx_found': msx_path is not None,
+        'msx_path': msx_path
+    })
 
 if __name__ == '__main__':
-    print(f"Servidor escuchando en puerto {PORT}")
-    print(f"Token de autenticación: {AUTH_TOKEN[:8]}...")
+    print(f"Servidor web escuchando en puerto {PORT}")
+    print(f"Token: {AUTH_TOKEN[:8]}...")
+    msx_path = find_msx_py()
+    if msx_path:
+        print(f"msx.py encontrado: {msx_path}")
     app.run(host='0.0.0.0', port=PORT)
 ''')
         os.chmod(webserver_path, 0o755)
@@ -113,6 +171,11 @@ if __name__ == '__main__':
             f.write(f'''#!/bin/bash
 WORK_DIR="{work_dir}"
 cd "$WORK_DIR"
+
+if pgrep -f "python3.*web_server.py" > /dev/null; then
+    echo "⚠ Servidor web ya está corriendo"
+    exit 0
+fi
 
 if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
     export WEB_SERVER_AUTH_TOKEN=$(openssl rand -hex 32)
@@ -166,6 +229,7 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
         print("⭐ Ya puedes usar /minecraft_start desde Discord")
         print("\n💡 Puerto: 8080")
         print("📋 Logs: tail -f /tmp/web_server.log")
+        print("\n🌐 IMPORTANTE: Configura el puerto 8080 como PÚBLICO en la pestaña PORTS de VS Code")
         
         try:
             if logger and hasattr(logger, 'info'):
@@ -383,7 +447,7 @@ def configurar_integracion_completa():
     webhook_actual = os.getenv("DISCORD_WEBHOOK_URL", "")
     if webhook_actual:
         print(f"Webhook actual: {webhook_actual}\n")
-        if not utils.confirmar("¿Cambiar webhook URL? (no recomendado cambiar) "):
+        if not utils.confirmar("¿Cambiar webhook URL?"):
             webhook_url = webhook_actual
         else:
             webhook_url = _solicitar_webhook_url()
