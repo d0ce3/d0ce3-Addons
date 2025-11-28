@@ -263,7 +263,6 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
 
         print("\n🚀 Iniciando servidor web...")
         subprocess.Popen(['bash', sh_path])
-        time.sleep(2)
         
         print(verde("\n✓ Servidor web configurado e iniciado"))
         print(verde("✓ Se iniciará automáticamente en futuros arranques"))
@@ -275,42 +274,33 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
         
         # Intentar hacer el puerto público automáticamente
         print("\n🌐 Configurando puerto 8080 como público...")
+        print("   Esperando que el servidor esté listo...")
+        time.sleep(3)
+        
         try:
-            # Método 1: gh CLI
-            result = subprocess.run(
-                ['gh', 'codespace', 'ports', 'visibility', '8080:public', '-c', os.getenv('CODESPACE_NAME', '')],
-                capture_output=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                print(verde("✓ Puerto 8080 configurado como público"))
-            else:
-                raise Exception("gh CLI no disponible o falló")
-        except:
-            # Método 2: Intentar via devcontainer
-            try:
-                import json
-                devcontainer_path = os.path.expanduser('~/.devcontainer.json')
-                if os.path.exists(devcontainer_path):
-                    with open(devcontainer_path, 'r') as f:
-                        config = json.load(f)
-                    
-                    if 'forwardPorts' not in config:
-                        config['forwardPorts'] = []
-                    
-                    if 8080 not in config['forwardPorts']:
-                        config['forwardPorts'].append(8080)
-                        
-                        with open(devcontainer_path, 'w') as f:
-                            json.dump(config, f, indent=2)
-                        
-                        print(verde("✓ Puerto 8080 agregado a devcontainer.json"))
+            codespace_name = os.getenv('CODESPACE_NAME')
+            
+            if codespace_name:
+                result = subprocess.run(
+                    ['gh', 'codespace', 'ports', 'visibility', '8080:public', '-c', codespace_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
+                
+                if result.returncode == 0:
+                    print(verde("✓ Puerto 8080 configurado como público automáticamente"))
                 else:
-                    raise Exception("devcontainer.json no encontrado")
-            except:
-                print(amarillo("⚠ No se pudo configurar automáticamente"))
-                print("  Configura manualmente el puerto 8080 como PÚBLICO en:")
-                print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
+                    raise Exception(f"gh CLI retornó código {result.returncode}")
+            else:
+                raise Exception("CODESPACE_NAME no está definido")
+
+        except Exception as e:
+            print(amarillo(f"⚠ No se pudo configurar automáticamente"))
+            print("  Configura manualmente el puerto 8080 como PÚBLICO en:")
+            print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
+            print("\n  O ejecuta manualmente:")
+            print(f"  gh codespace ports visibility 8080:public -c $CODESPACE_NAME")
         
         try:
             if logger and hasattr(logger, 'info'):
