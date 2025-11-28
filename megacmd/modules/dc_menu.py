@@ -35,7 +35,7 @@ def amarillo(texto):
 def azul(texto):
     return f"{AZUL}{texto}{RESET}"
 
-def _auto_configurar_web_server():
+def auto_configurar_web_server():
     from auto_webserver_setup import auto_configurar_web_server
     auto_configurar_web_server()
 
@@ -243,7 +243,7 @@ def configurar_integracion_completa():
         except:
             pass
         
-        _auto_configurar_web_server()
+        auto_configurar_web_server()
     else:
         print(f"{AMARILLO}\n⚠ Error al guardar configuración{RESET}")
         print("Configura manualmente con:")
