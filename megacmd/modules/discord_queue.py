@@ -30,7 +30,6 @@ class DiscordQueue:
         self._initialized = True
     
     def _init_db(self):
-        """Inicializa la base de datos con las tablas necesarias"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -87,16 +86,6 @@ class DiscordQueue:
         return event_id
     
     def get_pending_events(self, max_attempts: int = 3, limit: int = 50) -> List[Dict]:
-        """
-        Obtiene eventos pendientes de procesar
-        
-        Args:
-            max_attempts: Número máximo de intentos antes de descartar
-            limit: Cantidad máxima de eventos a retornar
-        
-        Returns:
-            Lista de eventos pendientes
-        """
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -124,7 +113,6 @@ class DiscordQueue:
         return events
     
     def mark_processed(self, event_id: int):
-        """Marca un evento como procesado exitosamente"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -138,7 +126,6 @@ class DiscordQueue:
         conn.close()
     
     def mark_failed(self, event_id: int, error_message: str = None):
-        """Incrementa el contador de intentos fallidos"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -154,7 +141,6 @@ class DiscordQueue:
         conn.close()
     
     def get_stats(self) -> Dict:
-        """Retorna estadísticas de la cola"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -184,15 +170,6 @@ class DiscordQueue:
         }
     
     def cleanup_old_events(self, days: int = 7):
-        """
-        Elimina eventos antiguos ya procesados
-        
-        Args:
-            days: Días de antigüedad para eliminar
-        
-        Returns:
-            int: Cantidad de eventos eliminados
-        """
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -210,7 +187,6 @@ class DiscordQueue:
         return deleted
     
     def get_failed_events(self) -> List[Dict]:
-        """Obtiene eventos que fallaron después de max intentos"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -236,7 +212,6 @@ class DiscordQueue:
         return events
     
     def retry_failed_event(self, event_id: int):
-        """Reinicia el contador de intentos de un evento fallido"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -250,7 +225,6 @@ class DiscordQueue:
         conn.close()
     
     def delete_event(self, event_id: int):
-        """Elimina un evento específico"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -259,9 +233,7 @@ class DiscordQueue:
         conn.commit()
         conn.close()
 
-
 queue_instance = DiscordQueue()
-
 
 __all__ = [
     'DiscordQueue',
