@@ -35,313 +35,9 @@ def amarillo(texto):
 def azul(texto):
     return f"{AZUL}{texto}{RESET}"
 
-
 def _auto_configurar_web_server():
-    work_dir = os.path.expanduser("~/.d0ce3_addons")
-    os.makedirs(work_dir, exist_ok=True)
-    
-    sh_path = os.path.join(work_dir, "start_web_server.sh")
-    webserver_path = os.path.join(work_dir, "web_server.py")
-    bashrc_path = os.path.expanduser("~/.bashrc")
-    bashrc_line = f"[ -f '{sh_path}' ] && nohup bash {sh_path} > /tmp/web_server.log 2>&1 &"
-
-    print("\n" + m("─" * 50))
-    print(mb("CONFIGURANDO SERVIDOR WEB DE CONTROL"))
-    print(m("─" * 50) + "\n")
-    print(f"📂 Instalando en: {work_dir}\n")
-
-    try:
-        # Instalar screen si no está
-        print("📦 Verificando screen...")
-        screen_check = subprocess.run(['which', 'screen'], capture_output=True)
-        if screen_check.returncode != 0:
-            print("Instalando screen...")
-            subprocess.run(['sudo', 'apt-get', 'update', '-qq'],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(['sudo', 'apt-get', 'install', '-y', 'screen'],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(verde("✓ Screen instalado"))
-        else:
-            print(verde("✓ Screen ya está instalado"))
-
-        print("\n📝 Creando web_server.py...")
-        with open(webserver_path, "w") as f:
-            f.write('''#!/usr/bin/env python3
-from flask import Flask, request, jsonify
-import subprocess
-import os
-import glob
-import time
-
-app = Flask(__name__)
-PORT = int(os.getenv('PORT', 8080))
-AUTH_TOKEN = os.getenv('WEB_SERVER_AUTH_TOKEN', 'default_token')
-
-def find_msx_py():
-    matches = glob.glob('/workspaces/*/msx.py')
-    return matches[0] if matches else None
-
-def execute_minecraft_command(action):
-    try:
-        msx_path = find_msx_py()
-        if not msx_path:
-            return {'error': 'msx.py no encontrado'}
-        
-        repo_root = os.path.dirname(msx_path)
-        
-        if action == 'start':
-            # Verificar si ya hay una sesión corriendo
-            check = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
-            if 'minecraft_msx' in check.stdout:
-                return {
-                    'status': 'info',
-                    'message': 'Servidor ya está iniciado'
-                }
-            
-            # Iniciar en screen session
-            cmd = f'screen -dmS minecraft_msx bash -c "cd {repo_root} && echo 1 | python3 msx.py"'
-            subprocess.Popen(cmd, shell=True, env=os.environ.copy())
-            time.sleep(2)
-            
-            return {
-                'status': 'success',
-                'action': 'start',
-                'message': 'Servidor Minecraft iniciando en screen session "minecraft_msx"',
-                'screen_session': 'minecraft_msx'
-            }
-        
-        elif action == 'stop':
-            # Intentar enviar comando stop via screen
-            check = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
-            if 'minecraft_msx' in check.stdout:
-                cmd = f'screen -S minecraft_msx -X stuff "2\\n"'
-                subprocess.Popen(cmd, shell=True)
-            else:
-                cmd = f'cd {repo_root} && echo 2 | python3 msx.py'
-                subprocess.Popen(cmd, shell=True, env=os.environ.copy())
-            
-            time.sleep(2)
-            
-            return {
-                'status': 'success',
-                'action': 'stop',
-                'message': 'Comando stop enviado al servidor'
-            }
-        
-        elif action == 'status':
-            java_check = subprocess.run(
-                ['pgrep', '-f', 'java.*forge.*jar'],
-                capture_output=True,
-                text=True
-            )
-            running = bool(java_check.stdout.strip())
-            pids = java_check.stdout.strip().split('\\n') if running else []
-            
-            screen_check = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
-            has_screen = 'minecraft_msx' in screen_check.stdout
-            
-            return {
-                'status': 'success',
-                'running': running,
-                'minecraft_pids': pids if running else [],
-                'screen_session': 'minecraft_msx' if has_screen else None
-            }
-        
-        else:
-            return {'error': f'Acción desconocida: {action}'}
-    
-    except Exception as e:
-        import traceback
-        return {
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        }
-
-@app.route('/minecraft/start', methods=['POST'])
-def minecraft_start():
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    if token != AUTH_TOKEN:
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    result = execute_minecraft_command('start')
-    if 'error' in result:
-        return jsonify(result), 500
-    return jsonify(result)
-
-@app.route('/minecraft/stop', methods=['POST'])
-def minecraft_stop():
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    if token != AUTH_TOKEN:
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    result = execute_minecraft_command('stop')
-    if 'error' in result:
-        return jsonify(result), 500
-    return jsonify(result)
-
-@app.route('/minecraft/status', methods=['GET'])
-def minecraft_status():
-    result = execute_minecraft_command('status')
-    return jsonify(result)
-
-@app.route('/health', methods=['GET'])
-def health():
-    msx_path = find_msx_py()
-    return jsonify({
-        'status': 'ok',
-        'port': PORT,
-        'msx_found': msx_path is not None,
-        'msx_path': msx_path
-    })
-
-if __name__ == '__main__':
-    print(f"Servidor web escuchando en puerto {PORT}")
-    print(f"Token: {AUTH_TOKEN[:8]}...")
-    msx_path = find_msx_py()
-    if msx_path:
-        print(f"msx.py encontrado: {msx_path}")
-    print("Tip: Conecta a la sesión de Minecraft con: screen -r minecraft_msx")
-    app.run(host='0.0.0.0', port=PORT)
-''')
-        os.chmod(webserver_path, 0o755)
-        print(verde("✓ web_server.py creado"))
-
-        print("📝 Creando start_web_server.sh...")
-        with open(sh_path, "w") as f:
-            f.write('''#!/bin/bash
-WORK_DIR="$HOME/.d0ce3_addons"
-cd "$WORK_DIR"
-
-if pgrep -f "python3.*web_server.py" > /dev/null; then
-    echo "⚠ Servidor web ya está corriendo"
-    exit 0
-fi
-
-# Generar token si no existe Y guardarlo en bashrc
-if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
-    NEW_TOKEN=$(openssl rand -hex 32)
-    
-    if ! grep -q "WEB_SERVER_AUTH_TOKEN" ~/.bashrc 2>/dev/null; then
-        echo "export WEB_SERVER_AUTH_TOKEN=\\"$NEW_TOKEN\\"" >> ~/.bashrc
-    fi
-    
-    export WEB_SERVER_AUTH_TOKEN="$NEW_TOKEN"
-fi
-
-PORT=${PORT:-8080}
-
-if ! python3 -c "import flask" 2>/dev/null; then
-    pip3 install flask >/dev/null 2>&1
-fi
-
-nohup python3 "$WORK_DIR/web_server.py" > /tmp/web_server.log 2>&1 &
-
-echo "✅ Servidor web iniciado (puerto $PORT)"
-echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
-''')
-        os.chmod(sh_path, 0o755)
-        print(verde("✓ start_web_server.sh creado"))
-
-        if os.path.exists(bashrc_path):
-            with open(bashrc_path, "r") as f:
-                bashrc_content = f.read()
-            
-            if bashrc_line not in bashrc_content:
-                print("\n📝 Agregando inicio automático a ~/.bashrc...")
-                with open(bashrc_path, "a") as f:
-                    f.write(f"\n# d0ce3-Addons auto-start\n{bashrc_line}\n")
-                print(verde("✓ Agregado a ~/.bashrc"))
-            else:
-                print(verde("✓ Ya configurado en ~/.bashrc"))
-        
-        print("\n📦 Verificando Flask...")
-        try:
-            import flask
-            print(verde("✓ Flask ya está instalado"))
-        except ImportError:
-            print("Instalando Flask...")
-            resultado = subprocess.call(
-                ["pip3", "install", "flask"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            if resultado == 0:
-                print(verde("✓ Flask instalado"))
-            else:
-                print(amarillo("⚠ Instálalo manualmente: pip3 install flask"))
-
-        print("\n🚀 Iniciando servidor web...")
-        subprocess.Popen(['bash', sh_path])
-        
-        print(verde("\n✓ Servidor web configurado e iniciado"))
-        print(verde("✓ Se iniciará automáticamente en futuros arranques"))
-        print(f"\n📂 Archivos en: {work_dir}")
-        print("⭐ Ya puedes usar /minecraft_start desde Discord")
-        print("\n💡 Puerto: 8080")
-        print("📋 Logs: tail -f /tmp/web_server.log")
-        print("🖥️  Consola: screen -r minecraft_msx")
-        
-        # Intentar hacer el puerto público automáticamente con loop de verificación
-        print("\n🌐 Configurando puerto 8080 como público...")
-        print("   Esperando que el servidor esté listo...")
-
-        import socket
-        port_ready = False
-        for i in range(10):
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                result = sock.connect_ex(('localhost', 8080))
-                sock.close()
-                if result == 0:
-                    print(verde(f"   ✓ Puerto 8080 escuchando (después de {i+1}s)"))
-                    port_ready = True
-                    break
-            except:
-                pass
-            time.sleep(1)
-        
-        if not port_ready:
-            print(amarillo("   ⚠ Puerto 8080 no responde aún, intentando de todas formas..."))
-
-        time.sleep(2)
-
-        try:
-            codespace_name = os.getenv('CODESPACE_NAME')
-            
-            if codespace_name:
-                result = subprocess.run(
-                    ['gh', 'codespace', 'ports', 'visibility', '8080:public', '-c', codespace_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=15
-                )
-                
-                if result.returncode == 0:
-                    print(verde("✓ Puerto 8080 configurado como público automáticamente"))
-                else:
-                    error_msg = result.stderr.strip() if result.stderr else result.stdout.strip()
-                    raise Exception(f"gh CLI retornó código {result.returncode}: {error_msg}")
-            else:
-                raise Exception("CODESPACE_NAME no está definido")
-
-        except Exception as e:
-            print(amarillo(f"⚠ No se pudo configurar automáticamente: {str(e)}"))
-            print("  Configura manualmente el puerto 8080 como PÚBLICO en:")
-            print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
-            print("\n  O ejecuta manualmente:")
-            print("  gh codespace ports visibility 8080:public -c $CODESPACE_NAME")
-        
-        try:
-            if logger and hasattr(logger, 'info'):
-                logger.info(f"Servidor web instalado en {work_dir}")
-        except:
-            pass
-            
-    except Exception as e:
-        print(rojo(f"\n✗ Error: {e}"))
-        import traceback
-        print(traceback.format_exc())
-
+    from auto_webserver_setup import auto_configurar_web_server
+    auto_configurar_web_server()
 
 def _cargar_discord_queue():
     try:
@@ -351,7 +47,6 @@ def _cargar_discord_queue():
         return None
     except Exception:
         return None
-
 
 def menu_principal_discord():
     while True:
@@ -442,7 +137,6 @@ def menu_principal_discord():
             print("\n")
             break
 
-
 def mostrar_info_bot():
     utils.limpiar_pantalla()
     
@@ -498,7 +192,6 @@ def mostrar_info_bot():
             print(f"Enlace: {DISCORD_BOT_INVITE_URL}")
     
     utils.pausar()
-
 
 def configurar_integracion_completa():
     utils.limpiar_pantalla()
@@ -559,7 +252,6 @@ def configurar_integracion_completa():
     
     utils.pausar()
 
-
 def _solicitar_user_id():
     print(mb("Cómo obtener tu Discord User ID:"))
     print("  1. Abre Discord")
@@ -582,11 +274,6 @@ def _solicitar_user_id():
             print("  Debe ser solo números (mín. 17 dígitos)")
             print(f"  Ejemplo: {amarillo('331904820590018562')}\n")
 
-
-def _solicitar_webhook_url():
-    return _detectar_webhook_url()
-
-
 def _detectar_webhook_url():
     render_service = os.getenv("RENDER_SERVICE_NAME")
     render_external_url = os.getenv("RENDER_EXTERNAL_URL")
@@ -605,7 +292,6 @@ def _detectar_webhook_url():
         return f"{railway_static_url}/webhook/megacmd"
     
     return "https://doce-bt.onrender.com/webhook/megacmd"
-
 
 def _configurar_variables_permanentes(user_id, webhook_url):
     try:
@@ -653,7 +339,6 @@ def _configurar_variables_permanentes(user_id, webhook_url):
         except:
             pass
         return False
-
 
 def mostrar_estadisticas_cola():
     utils.limpiar_pantalla()
@@ -708,7 +393,6 @@ def mostrar_estadisticas_cola():
             pass
     
     utils.pausar()
-
 
 def menu_gestion_eventos():
     while True:
@@ -768,7 +452,6 @@ def menu_gestion_eventos():
             print("\n")
             break
 
-
 def _ver_eventos_fallidos():
     utils.limpiar_pantalla()
     
@@ -803,7 +486,6 @@ def _ver_eventos_fallidos():
     
     utils.pausar()
 
-
 def _reintentar_evento():
     try:
         discord_queue = _cargar_discord_queue()
@@ -833,7 +515,6 @@ def _reintentar_evento():
         print(rojo(f"\n✗ Error: {e}"))
     
     utils.pausar()
-
 
 def _limpiar_eventos_antiguos():
     print("\n" + m("─" * 50))
@@ -866,7 +547,6 @@ def _limpiar_eventos_antiguos():
         print(rojo(f"\n✗ Error: {e}"))
     
     utils.pausar()
-
 
 def _ver_eventos_pendientes():
     utils.limpiar_pantalla()
@@ -901,7 +581,6 @@ def _ver_eventos_pendientes():
     
     utils.pausar()
 
-
 def _mostrar_info_conexion_wrapper():
     try:
         dc_codespace = CloudModuleLoader.load_module("dc_codespace")
@@ -914,7 +593,6 @@ def _mostrar_info_conexion_wrapper():
         print(rojo(f"\n✗ Error: {e}"))
         utils.pausar()
 
-
 def _mostrar_comando_sugerido_wrapper():
     try:
         dc_codespace = CloudModuleLoader.load_module("dc_codespace")
@@ -926,7 +604,6 @@ def _mostrar_comando_sugerido_wrapper():
     except Exception as e:
         print(rojo(f"\n✗ Error: {e}"))
         utils.pausar()
-
 
 __all__ = [
     'menu_principal_discord',
