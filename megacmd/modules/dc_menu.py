@@ -50,7 +50,18 @@ def _auto_configurar_web_server():
     print(f"📂 Instalando en: {work_dir}\n")
 
     try:
-        print("📝 Creando web_server.py...")
+        # Instalar screen si no está
+        print("📦 Verificando screen...")
+        screen_check = subprocess.run(['which', 'screen'], capture_output=True)
+        if screen_check.returncode != 0:
+            print("Instalando screen...")
+            subprocess.run(['sudo', 'apt-get', 'update', '-qq'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['sudo', 'apt-get', 'install', '-y', 'screen'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(verde("✓ Screen instalado"))
+        else:
+            print(verde("✓ Screen ya está instalado"))
+
+        print("\n📝 Creando web_server.py...")
         with open(webserver_path, "w") as f:
             f.write('''#!/usr/bin/env python3
 from flask import Flask, request, jsonify
@@ -76,19 +87,38 @@ def execute_minecraft_command(action):
         repo_root = os.path.dirname(msx_path)
         
         if action == 'start':
-            cmd = f"cd {repo_root} && echo '1' | python3 msx.py"
-            subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Verificar si ya hay una sesión corriendo
+            check = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
+            if 'minecraft_msx' in check.stdout:
+                return {
+                    'status': 'info',
+                    'message': 'Servidor ya está iniciado'
+                }
+            
+            # Iniciar en screen session
+            cmd = f'screen -dmS minecraft_msx bash -c "cd {repo_root} && echo 1 | python3 msx.py"'
+            subprocess.Popen(cmd, shell=True, env=os.environ.copy())
             time.sleep(2)
             
             return {
                 'status': 'success',
                 'action': 'start',
-                'message': 'Servidor Minecraft iniciando...'
+                'message': 'Servidor Minecraft iniciando en screen session "minecraft_msx"',
+                'screen_session': 'minecraft_msx'
             }
         
         elif action == 'stop':
-            cmd = f"cd {repo_root} && echo '2' | python3 msx.py"
-            subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Intentar enviar comando stop via screen
+            check = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
+            if 'minecraft_msx' in check.stdout:
+                # Si hay screen session, enviar echo 2
+                cmd = f'screen -S minecraft_msx -X stuff "2\\n"'
+                subprocess.Popen(cmd, shell=True)
+            else:
+                # Fallback: ejecutar directamente
+                cmd = f'cd {repo_root} && echo 2 | python3 msx.py'
+                subprocess.Popen(cmd, shell=True, env=os.environ.copy())
+            
             time.sleep(2)
             
             return {
@@ -106,17 +136,26 @@ def execute_minecraft_command(action):
             running = bool(java_check.stdout.strip())
             pids = java_check.stdout.strip().split('\\n') if running else []
             
+            # Verificar screen sessions
+            screen_check = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
+            has_screen = 'minecraft_msx' in screen_check.stdout
+            
             return {
                 'status': 'success',
                 'running': running,
-                'minecraft_pids': pids if running else []
+                'minecraft_pids': pids if running else [],
+                'screen_session': 'minecraft_msx' if has_screen else None
             }
         
         else:
             return {'error': f'Acción desconocida: {action}'}
     
     except Exception as e:
-        return {'error': str(e)}
+        import traceback
+        return {
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }
 
 @app.route('/minecraft/start', methods=['POST'])
 def minecraft_start():
@@ -161,6 +200,7 @@ if __name__ == '__main__':
     msx_path = find_msx_py()
     if msx_path:
         print(f"msx.py encontrado: {msx_path}")
+    print("Tip: Conecta a la sesión de Minecraft con: screen -r minecraft_msx")
     app.run(host='0.0.0.0', port=PORT)
 ''')
         os.chmod(webserver_path, 0o755)
@@ -222,6 +262,7 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
 
         print("\n🚀 Iniciando servidor web...")
         subprocess.Popen(['bash', sh_path])
+        time.sleep(2)
         
         print(verde("\n✓ Servidor web configurado e iniciado"))
         print(verde("✓ Se iniciará automáticamente en futuros arranques"))
@@ -229,7 +270,46 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
         print("⭐ Ya puedes usar /minecraft_start desde Discord")
         print("\n💡 Puerto: 8080")
         print("📋 Logs: tail -f /tmp/web_server.log")
-        print("\n🌐 IMPORTANTE: Configura el puerto 8080 como PÚBLICO en la pestaña PORTS de VS Code")
+        print("🖥️  Consola: screen -r minecraft_msx")
+        
+        # Intentar hacer el puerto público automáticamente
+        print("\n🌐 Configurando puerto 8080 como público...")
+        try:
+            # Método 1: gh CLI
+            result = subprocess.run(
+                ['gh', 'codespace', 'ports', 'visibility', '8080:public', '-c', os.getenv('CODESPACE_NAME', '')],
+                capture_output=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                print(verde("✓ Puerto 8080 configurado como público"))
+            else:
+                raise Exception("gh CLI no disponible o falló")
+        except:
+            # Método 2: Intentar via devcontainer
+            try:
+                import json
+                devcontainer_path = os.path.expanduser('~/.devcontainer.json')
+                if os.path.exists(devcontainer_path):
+                    with open(devcontainer_path, 'r') as f:
+                        config = json.load(f)
+                    
+                    if 'forwardPorts' not in config:
+                        config['forwardPorts'] = []
+                    
+                    if 8080 not in config['forwardPorts']:
+                        config['forwardPorts'].append(8080)
+                        
+                        with open(devcontainer_path, 'w') as f:
+                            json.dump(config, f, indent=2)
+                        
+                        print(verde("✓ Puerto 8080 agregado a devcontainer.json"))
+                else:
+                    raise Exception("devcontainer.json no encontrado")
+            except:
+                print(amarillo("⚠ No se pudo configurar automáticamente"))
+                print("  Configura manualmente el puerto 8080 como PÚBLICO en:")
+                print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
         
         try:
             if logger and hasattr(logger, 'info'):
@@ -296,8 +376,8 @@ def menu_principal_discord():
             print(m("│ 5. Ver estadísticas de la cola                 │"))
             print(m("│ 6. Gestión de eventos                          │"))
         else:
-            print(m("│ 5. [Sistema de cola no disponible]             │"))
-            print(m("│ 6. [Sistema de cola no disponible]             │"))
+            print(m("│ 5. [Sistema de cola no disponible]            │"))
+            print(m("│ 6. [Sistema de cola no disponible]            │"))
         
         print(m("│ 7. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
@@ -695,7 +775,7 @@ def menu_gestion_eventos():
         print(m("┌────────────────────────────────────────────────┐"))
         print(m("│ 1. Ver eventos fallidos                        │"))
         print(m("│ 2. Reintentar evento fallido                   │"))
-        print(m("│ 3. Limpiar eventos antiguos (7+ días)          │"))
+        print(m("│ 3. Limpiar eventos antiguos (7+ días)         │"))
         print(m("│ 4. Ver todos los eventos pendientes            │"))
         print(m("│ 5. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
