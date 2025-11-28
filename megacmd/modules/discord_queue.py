@@ -1,64 +1,347 @@
-import sys
-import os
-
-# Diagnóstico de importación de SQLite3
-try:
-    import sqlite3
-    SQLITE_AVAILABLE = True
-    SQLITE_VERSION = sqlite3.sqlite_version
-    SQLITE_ERROR = None
-except ImportError as e:
-    SQLITE_AVAILABLE = False
-    SQLITE_VERSION = None
-    SQLITE_ERROR = str(e)
-    # Imprimir solo una vez al cargar el módulo
-    print(f"⚠️  discord_queue: SQLite3 no disponible - {e}")
-    print(f"   Python: {sys.version}")
-    print(f"   Executable: {sys.executable}")
-
+"""
+discord_queue.py con proxy a Python del sistema para SQLite3
+Permite usar SQLite3 desde un ejecutable empaquetado sin incluirlo
+"""
 import json
+import os
+import subprocess
+import sys
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import threading
 
-class DiscordQueue:
+# Detectar si estamos en ejecutable empaquetado
+IS_PACKAGED = getattr(sys, 'frozen', False) or '.msx' in sys.executable
+
+# Path al Python del sistema (fuera del ejecutable)
+SYSTEM_PYTHON = '/usr/bin/python3'
+
+# Verificar si podemos usar SQLite3 directamente
+try:
+    import sqlite3
+    CAN_USE_SQLITE_DIRECT = True
+except ImportError:
+    CAN_USE_SQLITE_DIRECT = False
+
+# Decidir estrategia
+if CAN_USE_SQLITE_DIRECT:
+    USE_MODE = 'direct'
+    print("✓ discord_queue: Usando SQLite3 directo")
+elif IS_PACKAGED and os.path.exists(SYSTEM_PYTHON):
+    USE_MODE = 'proxy'
+    print("✓ discord_queue: Usando SQLite3 via proxy (Python del sistema)")
+else:
+    USE_MODE = 'json'
+    print("⚠️  discord_queue: Usando JSON como backend")
+
+
+class SQLiteProxy:
     """
-    Cola de eventos persistente para Discord
-    Usa SQLite3 si está disponible, JSON como fallback
+    Proxy que ejecuta operaciones SQLite en Python del sistema via subprocess
     """
-    _instance = None
-    _lock = threading.Lock()
     
-    def __new__(cls, db_path: str = None):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self, db_path: str = None):
-        if self._initialized:
-            return
-        
-        if db_path is None:
-            workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
-            db_path = os.path.join(workspace, ".discord_events.db")
-        
+    def __init__(self, db_path: str):
         self.db_path = db_path
-        self.using_sqlite = SQLITE_AVAILABLE
-        
-        if SQLITE_AVAILABLE:
-            self._init_sqlite_db()
-        else:
-            # Fallback a JSON
-            self.db_path = db_path.replace('.db', '.json')
-            self._init_json_db()
-        
-        self._initialized = True
+        self.helper_script = self._create_helper_script()
     
-    def _init_sqlite_db(self):
-        """Inicializa base de datos SQLite"""
+    def _create_helper_script(self) -> str:
+        """Crea script helper temporal para operaciones SQLite"""
+        script_path = '/tmp/discord_queue_helper.py'
+        
+        script_content = '''#!/usr/bin/env python3
+import sqlite3
+import json
+import sys
+from datetime import datetime, timedelta
+
+def init_db(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL,
+            processed BOOLEAN DEFAULT 0,
+            attempts INTEGER DEFAULT 0,
+            last_attempt TIMESTAMP,
+            error_message TEXT
+        )
+    """)
+    
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed ON events(processed, attempts)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_created ON events(created_at)")
+    
+    conn.commit()
+    conn.close()
+    print(json.dumps({"success": True}))
+
+def add_event(db_path, user_id, event_type, payload):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        INSERT INTO events (user_id, event_type, payload, created_at)
+        VALUES (?, ?, ?, ?)
+    """, (user_id, event_type, json.dumps(payload), datetime.now().isoformat()))
+    
+    event_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    print(json.dumps({"success": True, "event_id": event_id}))
+
+def get_pending_events(db_path, max_attempts, limit):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT * FROM events
+        WHERE processed = 0 AND attempts < ?
+        ORDER BY created_at ASC
+        LIMIT ?
+    """, (max_attempts, limit))
+    
+    events = []
+    for row in cursor.fetchall():
+        events.append(dict(row))
+    
+    conn.close()
+    print(json.dumps({"success": True, "events": events}))
+
+def mark_processed(db_path, event_id):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        UPDATE events
+        SET processed = 1, last_attempt = ?
+        WHERE id = ?
+    """, (datetime.now().isoformat(), event_id))
+    
+    conn.commit()
+    conn.close()
+    print(json.dumps({"success": True}))
+
+def mark_failed(db_path, event_id, error_message):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        UPDATE events
+        SET attempts = attempts + 1, last_attempt = ?, error_message = ?
+        WHERE id = ?
+    """, (datetime.now().isoformat(), error_message, event_id))
+    
+    conn.commit()
+    conn.close()
+    print(json.dumps({"success": True}))
+
+def get_stats(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) as total FROM events")
+    total = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM events WHERE processed = 0")
+    pending = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM events WHERE processed = 1")
+    processed = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM events WHERE processed = 0 AND attempts >= 3")
+    failed = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    print(json.dumps({
+        "success": True,
+        "stats": {
+            "total": total,
+            "pending": pending,
+            "processed": processed,
+            "failed": failed
+        }
+    }))
+
+def cleanup_old_events(db_path, days):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+    
+    cursor.execute("DELETE FROM events WHERE processed = 1 AND created_at < ?", (cutoff_date,))
+    
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    print(json.dumps({"success": True, "deleted": deleted}))
+
+def get_failed_events(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT * FROM events
+        WHERE processed = 0 AND attempts >= 3
+        ORDER BY created_at DESC
+    """)
+    
+    events = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    print(json.dumps({"success": True, "events": events}))
+
+def retry_failed_event(db_path, event_id):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute("UPDATE events SET attempts = 0, error_message = NULL WHERE id = ?", (event_id,))
+    
+    conn.commit()
+    conn.close()
+    print(json.dumps({"success": True}))
+
+def delete_event(db_path, event_id):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    
+    conn.commit()
+    conn.close()
+    print(json.dumps({"success": True}))
+
+if __name__ == "__main__":
+    command = sys.argv[1]
+    db_path = sys.argv[2]
+    
+    if command == "init":
+        init_db(db_path)
+    elif command == "add_event":
+        user_id = sys.argv[3]
+        event_type = sys.argv[4]
+        payload = json.loads(sys.argv[5])
+        add_event(db_path, user_id, event_type, payload)
+    elif command == "get_pending":
+        max_attempts = int(sys.argv[3])
+        limit = int(sys.argv[4])
+        get_pending_events(db_path, max_attempts, limit)
+    elif command == "mark_processed":
+        event_id = int(sys.argv[3])
+        mark_processed(db_path, event_id)
+    elif command == "mark_failed":
+        event_id = int(sys.argv[3])
+        error_message = sys.argv[4] if len(sys.argv) > 4 else None
+        mark_failed(db_path, event_id, error_message)
+    elif command == "get_stats":
+        get_stats(db_path)
+    elif command == "cleanup":
+        days = int(sys.argv[3])
+        cleanup_old_events(db_path, days)
+    elif command == "get_failed":
+        get_failed_events(db_path)
+    elif command == "retry_failed":
+        event_id = int(sys.argv[3])
+        retry_failed_event(db_path, event_id)
+    elif command == "delete":
+        event_id = int(sys.argv[3])
+        delete_event(db_path, event_id)
+'''
+        
+        with open(script_path, 'w') as f:
+            f.write(script_content)
+        
+        os.chmod(script_path, 0o755)
+        return script_path
+    
+    def _call_helper(self, *args) -> dict:
+        """Ejecuta comando en Python del sistema"""
+        try:
+            result = subprocess.run(
+                [SYSTEM_PYTHON, self.helper_script] + list(args),
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                raise Exception(f"Helper error: {result.stderr}")
+            
+            return json.loads(result.stdout)
+        
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def init_db(self):
+        return self._call_helper("init", self.db_path)
+    
+    def add_event(self, user_id: str, event_type: str, payload: dict) -> int:
+        result = self._call_helper("add_event", self.db_path, user_id, event_type, json.dumps(payload))
+        return result.get("event_id", 0) if result.get("success") else 0
+    
+    def get_pending_events(self, max_attempts: int = 3, limit: int = 50) -> List[Dict]:
+        result = self._call_helper("get_pending", self.db_path, str(max_attempts), str(limit))
+        
+        if result.get("success"):
+            # Parsear payloads que vienen como strings
+            events = result.get("events", [])
+            for event in events:
+                if isinstance(event.get('payload'), str):
+                    event['payload'] = json.loads(event['payload'])
+            return events
+        return []
+    
+    def mark_processed(self, event_id: int):
+        return self._call_helper("mark_processed", self.db_path, str(event_id))
+    
+    def mark_failed(self, event_id: int, error_message: str = None):
+        args = ["mark_failed", self.db_path, str(event_id)]
+        if error_message:
+            args.append(error_message)
+        return self._call_helper(*args)
+    
+    def get_stats(self) -> Dict:
+        result = self._call_helper("get_stats", self.db_path)
+        return result.get("stats", {}) if result.get("success") else {}
+    
+    def cleanup_old_events(self, days: int = 7) -> int:
+        result = self._call_helper("cleanup", self.db_path, str(days))
+        return result.get("deleted", 0) if result.get("success") else 0
+    
+    def get_failed_events(self) -> List[Dict]:
+        result = self._call_helper("get_failed", self.db_path)
+        
+        if result.get("success"):
+            events = result.get("events", [])
+            for event in events:
+                if isinstance(event.get('payload'), str):
+                    event['payload'] = json.loads(event['payload'])
+            return events
+        return []
+    
+    def retry_failed_event(self, event_id: int):
+        return self._call_helper("retry_failed", self.db_path, str(event_id))
+    
+    def delete_event(self, event_id: int):
+        return self._call_helper("delete", self.db_path, str(event_id))
+
+
+class DiscordQueueDirect:
+    """Implementación directa con SQLite3 (cuando está disponible)"""
+    
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self._init_db()
+    
+    def _init_db(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -76,105 +359,33 @@ class DiscordQueue:
             )
         """)
         
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_processed 
-            ON events(processed, attempts)
-        """)
-        
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_created 
-            ON events(created_at)
-        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed ON events(processed, attempts)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_created ON events(created_at)")
         
         conn.commit()
         conn.close()
     
-    def _init_json_db(self):
-        """Inicializa almacenamiento JSON"""
-        if not os.path.exists(self.db_path):
-            self._save_json_data({
-                'events': [],
-                'next_id': 1
-            })
-    
-    def _get_sqlite_connection(self):
-        """Obtiene conexión SQLite"""
+    def _get_connection(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
     
-    def _load_json_data(self):
-        """Carga datos desde JSON"""
-        try:
-            with open(self.db_path, 'r') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {'events': [], 'next_id': 1}
-    
-    def _save_json_data(self, data):
-        """Guarda datos en JSON"""
-        with open(self.db_path, 'w') as f:
-            json.dump(data, f, indent=2)
-    
     def add_event(self, user_id: str, event_type: str, payload: dict) -> int:
-        """Añade un evento a la cola"""
-        if self.using_sqlite:
-            return self._add_event_sqlite(user_id, event_type, payload)
-        else:
-            return self._add_event_json(user_id, event_type, payload)
-    
-    def _add_event_sqlite(self, user_id: str, event_type: str, payload: dict) -> int:
-        conn = self._get_sqlite_connection()
+        conn = self._get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
             INSERT INTO events (user_id, event_type, payload, created_at)
             VALUES (?, ?, ?, ?)
-        """, (
-            user_id,
-            event_type,
-            json.dumps(payload),
-            datetime.now().isoformat()
-        ))
+        """, (user_id, event_type, json.dumps(payload), datetime.now().isoformat()))
         
         event_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        
-        return event_id
-    
-    def _add_event_json(self, user_id: str, event_type: str, payload: dict) -> int:
-        data = self._load_json_data()
-        
-        event_id = data['next_id']
-        data['next_id'] += 1
-        
-        event = {
-            'id': event_id,
-            'user_id': user_id,
-            'event_type': event_type,
-            'payload': payload,
-            'created_at': datetime.now().isoformat(),
-            'processed': False,
-            'attempts': 0,
-            'last_attempt': None,
-            'error_message': None
-        }
-        
-        data['events'].append(event)
-        self._save_json_data(data)
-        
         return event_id
     
     def get_pending_events(self, max_attempts: int = 3, limit: int = 50) -> List[Dict]:
-        """Obtiene eventos pendientes"""
-        if self.using_sqlite:
-            return self._get_pending_events_sqlite(max_attempts, limit)
-        else:
-            return self._get_pending_events_json(max_attempts, limit)
-    
-    def _get_pending_events_sqlite(self, max_attempts: int, limit: int) -> List[Dict]:
-        conn = self._get_sqlite_connection()
+        conn = self._get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -200,91 +411,26 @@ class DiscordQueue:
         conn.close()
         return events
     
-    def _get_pending_events_json(self, max_attempts: int, limit: int) -> List[Dict]:
-        data = self._load_json_data()
-        
-        events = [
-            e for e in data['events']
-            if not e['processed'] and e['attempts'] < max_attempts
-        ]
-        
-        events.sort(key=lambda x: x['created_at'])
-        return events[:limit]
-    
     def mark_processed(self, event_id: int):
-        """Marca un evento como procesado"""
-        if self.using_sqlite:
-            self._mark_processed_sqlite(event_id)
-        else:
-            self._mark_processed_json(event_id)
-    
-    def _mark_processed_sqlite(self, event_id: int):
-        conn = self._get_sqlite_connection()
+        conn = self._get_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            UPDATE events
-            SET processed = 1, last_attempt = ?
-            WHERE id = ?
-        """, (datetime.now().isoformat(), event_id))
-        
+        cursor.execute("UPDATE events SET processed = 1, last_attempt = ? WHERE id = ?",
+                      (datetime.now().isoformat(), event_id))
         conn.commit()
         conn.close()
-    
-    def _mark_processed_json(self, event_id: int):
-        data = self._load_json_data()
-        
-        for event in data['events']:
-            if event['id'] == event_id:
-                event['processed'] = True
-                event['last_attempt'] = datetime.now().isoformat()
-                break
-        
-        self._save_json_data(data)
     
     def mark_failed(self, event_id: int, error_message: str = None):
-        """Marca un evento como fallido"""
-        if self.using_sqlite:
-            self._mark_failed_sqlite(event_id, error_message)
-        else:
-            self._mark_failed_json(event_id, error_message)
-    
-    def _mark_failed_sqlite(self, event_id: int, error_message: str):
-        conn = self._get_sqlite_connection()
+        conn = self._get_connection()
         cursor = conn.cursor()
-        
         cursor.execute("""
-            UPDATE events
-            SET attempts = attempts + 1,
-                last_attempt = ?,
-                error_message = ?
+            UPDATE events SET attempts = attempts + 1, last_attempt = ?, error_message = ?
             WHERE id = ?
         """, (datetime.now().isoformat(), error_message, event_id))
-        
         conn.commit()
         conn.close()
     
-    def _mark_failed_json(self, event_id: int, error_message: str):
-        data = self._load_json_data()
-        
-        for event in data['events']:
-            if event['id'] == event_id:
-                event['attempts'] += 1
-                event['last_attempt'] = datetime.now().isoformat()
-                event['error_message'] = error_message
-                break
-        
-        self._save_json_data(data)
-    
     def get_stats(self) -> Dict:
-        """Obtiene estadísticas de la cola"""
-        if self.using_sqlite:
-            return self._get_stats_sqlite()
-        else:
-            return self._get_stats_json()
-    
-    def _get_stats_sqlite(self) -> Dict:
-        conn = self._get_sqlite_connection()
+        conn = self._get_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT COUNT(*) as total FROM events")
@@ -296,88 +442,27 @@ class DiscordQueue:
         cursor.execute("SELECT COUNT(*) as processed FROM events WHERE processed = 1")
         processed = cursor.fetchone()['processed']
         
-        cursor.execute("""
-            SELECT COUNT(*) as failed 
-            FROM events 
-            WHERE processed = 0 AND attempts >= 3
-        """)
+        cursor.execute("SELECT COUNT(*) as failed FROM events WHERE processed = 0 AND attempts >= 3")
         failed = cursor.fetchone()['failed']
         
         conn.close()
         
-        return {
-            'total': total,
-            'pending': pending,
-            'processed': processed,
-            'failed': failed
-        }
+        return {'total': total, 'pending': pending, 'processed': processed, 'failed': failed}
     
-    def _get_stats_json(self) -> Dict:
-        data = self._load_json_data()
-        events = data['events']
-        
-        total = len(events)
-        pending = len([e for e in events if not e['processed']])
-        processed = len([e for e in events if e['processed']])
-        failed = len([e for e in events if not e['processed'] and e['attempts'] >= 3])
-        
-        return {
-            'total': total,
-            'pending': pending,
-            'processed': processed,
-            'failed': failed
-        }
-    
-    def cleanup_old_events(self, days: int = 7):
-        """Limpia eventos antiguos procesados"""
-        if self.using_sqlite:
-            return self._cleanup_old_events_sqlite(days)
-        else:
-            return self._cleanup_old_events_json(days)
-    
-    def _cleanup_old_events_sqlite(self, days: int):
-        conn = self._get_sqlite_connection()
+    def cleanup_old_events(self, days: int = 7) -> int:
+        conn = self._get_connection()
         cursor = conn.cursor()
         
         cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
-        
-        cursor.execute("""
-            DELETE FROM events
-            WHERE processed = 1 AND created_at < ?
-        """, (cutoff_date,))
+        cursor.execute("DELETE FROM events WHERE processed = 1 AND created_at < ?", (cutoff_date,))
         
         deleted = cursor.rowcount
         conn.commit()
         conn.close()
-        
-        return deleted
-    
-    def _cleanup_old_events_json(self, days: int):
-        data = self._load_json_data()
-        
-        cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
-        
-        original_count = len(data['events'])
-        
-        data['events'] = [
-            e for e in data['events']
-            if not (e['processed'] and e['created_at'] < cutoff_date)
-        ]
-        
-        deleted = original_count - len(data['events'])
-        
-        self._save_json_data(data)
         return deleted
     
     def get_failed_events(self) -> List[Dict]:
-        """Obtiene eventos fallidos"""
-        if self.using_sqlite:
-            return self._get_failed_events_sqlite()
-        else:
-            return self._get_failed_events_json()
-    
-    def _get_failed_events_sqlite(self) -> List[Dict]:
-        conn = self._get_sqlite_connection()
+        conn = self._get_connection()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -401,86 +486,202 @@ class DiscordQueue:
         conn.close()
         return events
     
-    def _get_failed_events_json(self) -> List[Dict]:
-        data = self._load_json_data()
+    def retry_failed_event(self, event_id: int):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE events SET attempts = 0, error_message = NULL WHERE id = ?", (event_id,))
+        conn.commit()
+        conn.close()
+    
+    def delete_event(self, event_id: int):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM events WHERE id = ?", (event_id,))
+        conn.commit()
+        conn.close()
+
+
+class DiscordQueueJSON:
+    """Implementación JSON (fallback final)"""
+    
+    def __init__(self, db_path: str):
+        self.db_path = db_path.replace('.db', '.json')
+        self._lock = threading.Lock()
+        self._init_db()
+    
+    def _init_db(self):
+        if not os.path.exists(self.db_path):
+            self._save_data({'events': [], 'next_id': 1})
+    
+    def _load_data(self):
+        with self._lock:
+            try:
+                with open(self.db_path, 'r') as f:
+                    return json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                return {'events': [], 'next_id': 1}
+    
+    def _save_data(self, data):
+        with self._lock:
+            with open(self.db_path, 'w') as f:
+                json.dump(data, f, indent=2)
+    
+    def add_event(self, user_id: str, event_type: str, payload: dict) -> int:
+        data = self._load_data()
+        event_id = data['next_id']
+        data['next_id'] += 1
         
-        events = [
+        data['events'].append({
+            'id': event_id,
+            'user_id': user_id,
+            'event_type': event_type,
+            'payload': payload,
+            'created_at': datetime.now().isoformat(),
+            'processed': False,
+            'attempts': 0,
+            'last_attempt': None,
+            'error_message': None
+        })
+        
+        self._save_data(data)
+        return event_id
+    
+    def get_pending_events(self, max_attempts: int = 3, limit: int = 50) -> List[Dict]:
+        data = self._load_data()
+        events = [e for e in data['events'] if not e['processed'] and e['attempts'] < max_attempts]
+        events.sort(key=lambda x: x['created_at'])
+        return events[:limit]
+    
+    def mark_processed(self, event_id: int):
+        data = self._load_data()
+        for event in data['events']:
+            if event['id'] == event_id:
+                event['processed'] = True
+                event['last_attempt'] = datetime.now().isoformat()
+                break
+        self._save_data(data)
+    
+    def mark_failed(self, event_id: int, error_message: str = None):
+        data = self._load_data()
+        for event in data['events']:
+            if event['id'] == event_id:
+                event['attempts'] += 1
+                event['last_attempt'] = datetime.now().isoformat()
+                event['error_message'] = error_message
+                break
+        self._save_data(data)
+    
+    def get_stats(self) -> Dict:
+        data = self._load_data()
+        events = data['events']
+        
+        return {
+            'total': len(events),
+            'pending': len([e for e in events if not e['processed']]),
+            'processed': len([e for e in events if e['processed']]),
+            'failed': len([e for e in events if not e['processed'] and e['attempts'] >= 3])
+        }
+    
+    def cleanup_old_events(self, days: int = 7) -> int:
+        data = self._load_data()
+        cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+        
+        original_count = len(data['events'])
+        data['events'] = [
             e for e in data['events']
-            if not e['processed'] and e['attempts'] >= 3
+            if not (e['processed'] and e['created_at'] < cutoff_date)
         ]
         
+        deleted = original_count - len(data['events'])
+        self._save_data(data)
+        return deleted
+    
+    def get_failed_events(self) -> List[Dict]:
+        data = self._load_data()
+        events = [e for e in data['events'] if not e['processed'] and e['attempts'] >= 3]
         events.sort(key=lambda x: x['created_at'], reverse=True)
         return events
     
     def retry_failed_event(self, event_id: int):
-        """Reinicia un evento fallido"""
-        if self.using_sqlite:
-            self._retry_failed_event_sqlite(event_id)
-        else:
-            self._retry_failed_event_json(event_id)
-    
-    def _retry_failed_event_sqlite(self, event_id: int):
-        conn = self._get_sqlite_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            UPDATE events
-            SET attempts = 0, error_message = NULL
-            WHERE id = ?
-        """, (event_id,))
-        
-        conn.commit()
-        conn.close()
-    
-    def _retry_failed_event_json(self, event_id: int):
-        data = self._load_json_data()
-        
+        data = self._load_data()
         for event in data['events']:
             if event['id'] == event_id:
                 event['attempts'] = 0
                 event['error_message'] = None
                 break
-        
-        self._save_json_data(data)
+        self._save_data(data)
     
     def delete_event(self, event_id: int):
-        """Elimina un evento"""
-        if self.using_sqlite:
-            self._delete_event_sqlite(event_id)
-        else:
-            self._delete_event_json(event_id)
-    
-    def _delete_event_sqlite(self, event_id: int):
-        conn = self._get_sqlite_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM events WHERE id = ?", (event_id,))
-        
-        conn.commit()
-        conn.close()
-    
-    def _delete_event_json(self, event_id: int):
-        data = self._load_json_data()
+        data = self._load_data()
         data['events'] = [e for e in data['events'] if e['id'] != event_id]
-        self._save_json_data(data)
+        self._save_data(data)
+
+
+class DiscordQueue:
+    """Wrapper inteligente que elige el mejor backend"""
+    _instance = None
+    _lock = threading.Lock()
     
-    def get_backend_info(self) -> Dict:
-        """Información sobre el backend usado"""
-        return {
-            'backend': 'SQLite3' if self.using_sqlite else 'JSON',
-            'sqlite_available': SQLITE_AVAILABLE,
-            'sqlite_version': SQLITE_VERSION,
-            'sqlite_error': SQLITE_ERROR,
-            'db_path': self.db_path
-        }
+    def __new__(cls, db_path: str = None):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self, db_path: str = None):
+        if self._initialized:
+            return
+        
+        if db_path is None:
+            workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
+            db_path = os.path.join(workspace, ".discord_events.db")
+        
+        # Elegir implementación
+        if USE_MODE == 'direct':
+            self._impl = DiscordQueueDirect(db_path)
+            self.backend = "SQLite3 (directo)"
+        elif USE_MODE == 'proxy':
+            self._impl = SQLiteProxy(db_path)
+            self.backend = "SQLite3 (proxy via sistema)"
+        else:
+            self._impl = DiscordQueueJSON(db_path)
+            self.backend = "JSON (fallback)"
+        
+        self._initialized = True
+        print(f"✓ Backend seleccionado: {self.backend}")
+    
+    # Delegar métodos
+    def add_event(self, user_id: str, event_type: str, payload: dict) -> int:
+        return self._impl.add_event(user_id, event_type, payload)
+    
+    def get_pending_events(self, max_attempts: int = 3, limit: int = 50) -> List[Dict]:
+        return self._impl.get_pending_events(max_attempts, limit)
+    
+    def mark_processed(self, event_id: int):
+        return self._impl.mark_processed(event_id)
+    
+    def mark_failed(self, event_id: int, error_message: str = None):
+        return self._impl.mark_failed(event_id, error_message)
+    
+    def get_stats(self) -> Dict:
+        return self._impl.get_stats()
+    
+    def cleanup_old_events(self, days: int = 7):
+        return self._impl.cleanup_old_events(days)
+    
+    def get_failed_events(self) -> List[Dict]:
+        return self._impl.get_failed_events()
+    
+    def retry_failed_event(self, event_id: int):
+        return self._impl.retry_failed_event(event_id)
+    
+    def delete_event(self, event_id: int):
+        return self._impl.delete_event(event_id)
 
 
 # Instancia global
 queue_instance = DiscordQueue()
 
-__all__ = [
-    'DiscordQueue',
-    'queue_instance',
-    'SQLITE_AVAILABLE',
-    'SQLITE_VERSION'
-]
+__all__ = ['DiscordQueue', 'queue_instance', 'USE_MODE']
