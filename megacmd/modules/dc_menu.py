@@ -1,7 +1,3 @@
-"""
-Módulo de menú para integración con Discord
-Maneja la UI y presentación de información relacionada con el bot de Discord
-"""
 import os
 import subprocess
 
@@ -124,20 +120,22 @@ echo "========================================="
             print("\n💡 El servidor escucha en puerto 8080")
             print("📋 Ver logs: tail -f /tmp/web_server.log")
             
-            logger.log("INFO", "Servidor web de control iniciado automáticamente")
+            try:
+                if logger and hasattr(logger, 'info'):
+                    logger.info("Servidor web de control iniciado automáticamente")
+            except:
+                pass
             
         except Exception as e:
             print(rojo(f"\n✗ Error al iniciar el servidor web: {e}"))
             print(f"\n💡 Puedes iniciarlo manualmente con:")
             print(f"   bash {sh_path}")
-            logger.log("ERROR", f"Error iniciando servidor web: {e}")
     
     except Exception as e:
         print(rojo(f"\n✗ Error en configuración automática: {e}"))
         print("\n💡 Configuración manual necesaria:")
         print(f"   1. Navega a: {addon_path}")
         print(f"   2. Ejecuta: bash start_web_server.sh")
-        logger.log("ERROR", f"Error en auto_configurar_web_server: {e}")
 
 
 def _cargar_discord_queue():
@@ -193,8 +191,8 @@ def menu_principal_discord():
             print(m("│ 5. Ver estadísticas de la cola                 │"))
             print(m("│ 6. Gestión de eventos                          │"))
         else:
-            print(m("│ 5. [Sistema de cola no disponible]            │"))
-            print(m("│ 6. [Sistema de cola no disponible]            │"))
+            print(m("│ 5. [Sistema de cola no disponible]             │"))
+            print(m("│ 6. [Sistema de cola no disponible]             │"))
         
         print(m("│ 7. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
@@ -377,7 +375,12 @@ def configurar_integracion_completa():
         
         print(verde("✓ Notificaciones de backup activadas"))
         print(verde("✓ Sistema de cola iniciado"))
-        logger.log("INFO", f"Integración Discord configurada - User ID: {user_id}")
+        
+        try:
+            if logger and hasattr(logger, 'info'):
+                logger.info(f"Integración Discord configurada - User ID: {user_id}")
+        except:
+            pass
         
         _auto_configurar_web_server()
         
@@ -500,7 +503,11 @@ def _configurar_variables_permanentes(user_id, webhook_url):
         
     except Exception as e:
         print(rojo(f"\n✗ Error configurando variables: {e}"))
-        logger.log("ERROR", f"Error configurando variables permanentes: {e}")
+        try:
+            if logger and hasattr(logger, 'error'):
+                logger.error(f"Error configurando variables permanentes: {e}")
+        except:
+            pass
         return False
 
 
@@ -551,7 +558,11 @@ def mostrar_estadisticas_cola():
         
     except Exception as e:
         print(rojo(f"✗ Error obteniendo estadísticas: {e}\n"))
-        logger.log("ERROR", f"Error en estadísticas de cola: {e}")
+        try:
+            if logger and hasattr(logger, 'error'):
+                logger.error(f"Error en estadísticas de cola: {e}")
+        except:
+            pass
     
     utils.pausar()
 
@@ -579,7 +590,7 @@ def menu_gestion_eventos():
         print(m("┌────────────────────────────────────────────────┐"))
         print(m("│ 1. Ver eventos fallidos                        │"))
         print(m("│ 2. Reintentar evento fallido                   │"))
-        print(m("│ 3. Limpiar eventos antiguos (7+ días)         │"))
+        print(m("│ 3. Limpiar eventos antiguos (7+ días)          │"))
         print(m("│ 4. Ver todos los eventos pendientes            │"))
         print(m("│ 5. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
@@ -670,7 +681,11 @@ def _reintentar_evento():
         discord_queue.queue_instance.retry_failed_event(int(event_id))
         
         print(verde(f"\n✓ Evento {event_id} marcado para reintentar"))
-        logger.log("INFO", f"Evento {event_id} reintentado manualmente")
+        try:
+            if logger and hasattr(logger, 'info'):
+                logger.info(f"Evento {event_id} reintentado manualmente")
+        except:
+            pass
     
     except Exception as e:
         print(rojo(f"\n✗ Error: {e}"))
@@ -699,7 +714,11 @@ def _limpiar_eventos_antiguos():
         eliminados = discord_queue.queue_instance.cleanup_old_events(days=7)
         
         print(verde(f"\n✓ {eliminados} evento(s) eliminado(s)"))
-        logger.log("INFO", f"Limpieza de eventos: {eliminados} eliminados")
+        try:
+            if logger and hasattr(logger, 'info'):
+                logger.info(f"Limpieza de eventos: {eliminados} eliminados")
+        except:
+            pass
     
     except Exception as e:
         print(rojo(f"\n✗ Error: {e}"))
