@@ -1,6 +1,7 @@
 """
 discord_queue.py con proxy a Python del sistema para SQLite3
 Permite usar SQLite3 desde un ejecutable empaquetado sin incluirlo
+Logs en archivo y sistema de logging del addon (sin prints visibles al usuario)
 """
 import json
 import os
@@ -9,37 +10,50 @@ import sys
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import threading
+import logging
 
-# Detectar si estamos en ejecutable empaquetado
+_logger = logging.getLogger('discord_queue')
+_logger.setLevel(logging.INFO)
+log_file = os.path.join(os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace"), ".discord_queue.log")
+try:
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    _logger.addHandler(file_handler)
+except:
+    pass
+
+try:
+    addon_logger = CloudModuleLoader.load_module("logger")
+except:
+    addon_logger = None
+
+def _log(level, message):
+    _logger.log(getattr(logging, level, logging.INFO), message)
+    if addon_logger:
+        addon_logger.log(level, f"discord_queue: {message}")
+
 IS_PACKAGED = getattr(sys, 'frozen', False) or '.msx' in sys.executable
 
-# Path al Python del sistema (fuera del ejecutable)
 SYSTEM_PYTHON = '/usr/bin/python3'
 
-# Verificar si podemos usar SQLite3 directamente
 try:
     import sqlite3
     CAN_USE_SQLITE_DIRECT = True
 except ImportError:
     CAN_USE_SQLITE_DIRECT = False
 
-# Decidir estrategia
 if CAN_USE_SQLITE_DIRECT:
     USE_MODE = 'direct'
-    print("✓ discord_queue: Usando SQLite3 directo")
+    _log("DEBUG", "Backend: SQLite3 directo")
 elif IS_PACKAGED and os.path.exists(SYSTEM_PYTHON):
     USE_MODE = 'proxy'
-    print("✓ discord_queue: Usando SQLite3 via proxy (Python del sistema)")
+    _log("INFO", "Backend: SQLite3 via proxy (Python del sistema)")
 else:
     USE_MODE = 'json'
-    print("⚠️  discord_queue: Usando JSON como backend")
+    _log("WARNING", "Backend: JSON fallback (SQLite no disponible)")
 
 
 class SQLiteProxy:
-    """
-    Proxy que ejecuta operaciones SQLite en Python del sistema via subprocess
-    """
-    
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.helper_script = self._create_helper_script()
@@ -47,6 +61,10 @@ class SQLiteProxy:
     def _create_helper_script(self) -> str:
         """Crea script helper temporal para operaciones SQLite"""
         script_path = '/tmp/discord_queue_helper.py'
+        
+        if os.path.exists(script_path):
+            _log("DEBUG", "Reusando script helper existente")
+            return script_path
         
         script_content = '''#!/usr/bin/env python3
 import sqlite3
@@ -57,7 +75,6 @@ from datetime import datetime, timedelta
 def init_db(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,10 +88,8 @@ def init_db(db_path):
             error_message TEXT
         )
     """)
-    
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed ON events(processed, attempts)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_created ON events(created_at)")
-    
     conn.commit()
     conn.close()
     print(json.dumps({"success": True}))
@@ -82,47 +97,37 @@ def init_db(db_path):
 def add_event(db_path, user_id, event_type, payload):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     cursor.execute("""
         INSERT INTO events (user_id, event_type, payload, created_at)
         VALUES (?, ?, ?, ?)
     """, (user_id, event_type, json.dumps(payload), datetime.now().isoformat()))
-    
     event_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    
     print(json.dumps({"success": True, "event_id": event_id}))
 
 def get_pending_events(db_path, max_attempts, limit):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    
     cursor.execute("""
         SELECT * FROM events
         WHERE processed = 0 AND attempts < ?
         ORDER BY created_at ASC
         LIMIT ?
     """, (max_attempts, limit))
-    
-    events = []
-    for row in cursor.fetchall():
-        events.append(dict(row))
-    
+    events = [dict(row) for row in cursor.fetchall()]
     conn.close()
     print(json.dumps({"success": True, "events": events}))
 
 def mark_processed(db_path, event_id):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     cursor.execute("""
         UPDATE events
         SET processed = 1, last_attempt = ?
         WHERE id = ?
     """, (datetime.now().isoformat(), event_id))
-    
     conn.commit()
     conn.close()
     print(json.dumps({"success": True}))
@@ -130,13 +135,11 @@ def mark_processed(db_path, event_id):
 def mark_failed(db_path, event_id, error_message):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     cursor.execute("""
         UPDATE events
         SET attempts = attempts + 1, last_attempt = ?, error_message = ?
         WHERE id = ?
     """, (datetime.now().isoformat(), error_message, event_id))
-    
     conn.commit()
     conn.close()
     print(json.dumps({"success": True}))
@@ -144,21 +147,15 @@ def mark_failed(db_path, event_id, error_message):
 def get_stats(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     cursor.execute("SELECT COUNT(*) as total FROM events")
     total = cursor.fetchone()[0]
-    
     cursor.execute("SELECT COUNT(*) FROM events WHERE processed = 0")
     pending = cursor.fetchone()[0]
-    
     cursor.execute("SELECT COUNT(*) FROM events WHERE processed = 1")
     processed = cursor.fetchone()[0]
-    
     cursor.execute("SELECT COUNT(*) FROM events WHERE processed = 0 AND attempts >= 3")
     failed = cursor.fetchone()[0]
-    
     conn.close()
-    
     print(json.dumps({
         "success": True,
         "stats": {
@@ -172,39 +169,30 @@ def get_stats(db_path):
 def cleanup_old_events(db_path, days):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
-    
     cursor.execute("DELETE FROM events WHERE processed = 1 AND created_at < ?", (cutoff_date,))
-    
     deleted = cursor.rowcount
     conn.commit()
     conn.close()
-    
     print(json.dumps({"success": True, "deleted": deleted}))
 
 def get_failed_events(db_path):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    
     cursor.execute("""
         SELECT * FROM events
         WHERE processed = 0 AND attempts >= 3
         ORDER BY created_at DESC
     """)
-    
     events = [dict(row) for row in cursor.fetchall()]
     conn.close()
-    
     print(json.dumps({"success": True, "events": events}))
 
 def retry_failed_event(db_path, event_id):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     cursor.execute("UPDATE events SET attempts = 0, error_message = NULL WHERE id = ?", (event_id,))
-    
     conn.commit()
     conn.close()
     print(json.dumps({"success": True}))
@@ -212,9 +200,7 @@ def retry_failed_event(db_path, event_id):
 def delete_event(db_path, event_id):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
     cursor.execute("DELETE FROM events WHERE id = ?", (event_id,))
-    
     conn.commit()
     conn.close()
     print(json.dumps({"success": True}))
@@ -258,8 +244,8 @@ if __name__ == "__main__":
         
         with open(script_path, 'w') as f:
             f.write(script_content)
-        
         os.chmod(script_path, 0o755)
+        _log("INFO", "Script helper creado en /tmp/discord_queue_helper.py")
         return script_path
     
     def _call_helper(self, *args) -> dict:
@@ -273,11 +259,15 @@ if __name__ == "__main__":
             )
             
             if result.returncode != 0:
+                _log("ERROR", f"Helper script error: {result.stderr}")
                 raise Exception(f"Helper error: {result.stderr}")
             
             return json.loads(result.stdout)
-        
+        except subprocess.TimeoutExpired:
+            _log("ERROR", "Helper script timeout (>30s)")
+            return {"success": False, "error": "Timeout"}
         except Exception as e:
+            _log("ERROR", f"Helper call failed: {e}")
             return {"success": False, "error": str(e)}
     
     def init_db(self):
@@ -289,9 +279,7 @@ if __name__ == "__main__":
     
     def get_pending_events(self, max_attempts: int = 3, limit: int = 50) -> List[Dict]:
         result = self._call_helper("get_pending", self.db_path, str(max_attempts), str(limit))
-        
         if result.get("success"):
-            # Parsear payloads que vienen como strings
             events = result.get("events", [])
             for event in events:
                 if isinstance(event.get('payload'), str):
@@ -318,7 +306,6 @@ if __name__ == "__main__":
     
     def get_failed_events(self) -> List[Dict]:
         result = self._call_helper("get_failed", self.db_path)
-        
         if result.get("success"):
             events = result.get("events", [])
             for event in events:
@@ -335,7 +322,6 @@ if __name__ == "__main__":
 
 
 class DiscordQueueDirect:
-    """Implementación directa con SQLite3 (cuando está disponible)"""
     
     def __init__(self, db_path: str):
         self.db_path = db_path
@@ -344,7 +330,6 @@ class DiscordQueueDirect:
     def _init_db(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -358,10 +343,8 @@ class DiscordQueueDirect:
                 error_message TEXT
             )
         """)
-        
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed ON events(processed, attempts)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_created ON events(created_at)")
-        
         conn.commit()
         conn.close()
     
@@ -373,12 +356,10 @@ class DiscordQueueDirect:
     def add_event(self, user_id: str, event_type: str, payload: dict) -> int:
         conn = self._get_connection()
         cursor = conn.cursor()
-        
         cursor.execute("""
             INSERT INTO events (user_id, event_type, payload, created_at)
             VALUES (?, ?, ?, ?)
         """, (user_id, event_type, json.dumps(payload), datetime.now().isoformat()))
-        
         event_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -387,7 +368,6 @@ class DiscordQueueDirect:
     def get_pending_events(self, max_attempts: int = 3, limit: int = 50) -> List[Dict]:
         conn = self._get_connection()
         cursor = conn.cursor()
-        
         cursor.execute("""
             SELECT * FROM events
             WHERE processed = 0 AND attempts < ?
@@ -446,16 +426,13 @@ class DiscordQueueDirect:
         failed = cursor.fetchone()['failed']
         
         conn.close()
-        
         return {'total': total, 'pending': pending, 'processed': processed, 'failed': failed}
     
     def cleanup_old_events(self, days: int = 7) -> int:
         conn = self._get_connection()
         cursor = conn.cursor()
-        
         cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
         cursor.execute("DELETE FROM events WHERE processed = 1 AND created_at < ?", (cutoff_date,))
-        
         deleted = cursor.rowcount
         conn.commit()
         conn.close()
@@ -464,7 +441,6 @@ class DiscordQueueDirect:
     def get_failed_events(self) -> List[Dict]:
         conn = self._get_connection()
         cursor = conn.cursor()
-        
         cursor.execute("""
             SELECT * FROM events
             WHERE processed = 0 AND attempts >= 3
@@ -502,7 +478,6 @@ class DiscordQueueDirect:
 
 
 class DiscordQueueJSON:
-    """Implementación JSON (fallback final)"""
     
     def __init__(self, db_path: str):
         self.db_path = db_path.replace('.db', '.json')
@@ -530,7 +505,6 @@ class DiscordQueueJSON:
         data = self._load_data()
         event_id = data['next_id']
         data['next_id'] += 1
-        
         data['events'].append({
             'id': event_id,
             'user_id': user_id,
@@ -542,7 +516,6 @@ class DiscordQueueJSON:
             'last_attempt': None,
             'error_message': None
         })
-        
         self._save_data(data)
         return event_id
     
@@ -574,7 +547,6 @@ class DiscordQueueJSON:
     def get_stats(self) -> Dict:
         data = self._load_data()
         events = data['events']
-        
         return {
             'total': len(events),
             'pending': len([e for e in events if not e['processed']]),
@@ -585,13 +557,11 @@ class DiscordQueueJSON:
     def cleanup_old_events(self, days: int = 7) -> int:
         data = self._load_data()
         cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
-        
         original_count = len(data['events'])
         data['events'] = [
             e for e in data['events']
             if not (e['processed'] and e['created_at'] < cutoff_date)
         ]
-        
         deleted = original_count - len(data['events'])
         self._save_data(data)
         return deleted
@@ -618,7 +588,6 @@ class DiscordQueueJSON:
 
 
 class DiscordQueue:
-    """Wrapper inteligente que elige el mejor backend"""
     _instance = None
     _lock = threading.Lock()
     
@@ -638,7 +607,6 @@ class DiscordQueue:
             workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
             db_path = os.path.join(workspace, ".discord_events.db")
         
-        # Elegir implementación
         if USE_MODE == 'direct':
             self._impl = DiscordQueueDirect(db_path)
             self.backend = "SQLite3 (directo)"
@@ -650,9 +618,8 @@ class DiscordQueue:
             self.backend = "JSON (fallback)"
         
         self._initialized = True
-        print(f"✓ Backend seleccionado: {self.backend}")
+        _log("INFO", f"Inicializado con backend: {self.backend}")
     
-    # Delegar métodos
     def add_event(self, user_id: str, event_type: str, payload: dict) -> int:
         return self._impl.add_event(user_id, event_type, payload)
     
@@ -681,7 +648,6 @@ class DiscordQueue:
         return self._impl.delete_event(event_id)
 
 
-# Instancia global
 queue_instance = DiscordQueue()
 
 __all__ = ['DiscordQueue', 'queue_instance', 'USE_MODE']
