@@ -7,6 +7,7 @@ class Tema:
     MORADO_CLARO = "\033[35m"
     VERDE = "\033[92m"
     ROJO = "\033[91m"
+    AMARILLO = "\033[93m"
     BLANCO = "\033[97m"
     RESET = "\033[0m"
     BOLD = "\033[1m"
@@ -41,6 +42,10 @@ class Tema:
     @staticmethod
     def rojo(texto):
         return f"{Tema.ROJO}{texto}{Tema.RESET}"
+    
+    @staticmethod
+    def amarillo(texto):
+        return f"{Tema.AMARILLO}{texto}{Tema.RESET}"
     
     @staticmethod
     def blanco(texto):
@@ -248,15 +253,42 @@ class MenuBackup:
     
     def _toggle_autobackup(self, estado_actual):
         if estado_actual:
-            self.config.set("autobackup_enabled", False)
-            Display.msg("Autobackup desactivado")
-            self.utils.logger.info("Autobackup desactivado")
+            # Desactivar
+            if InputHandler.confirmar("¿Desactivar autobackup?"):
+                self.autobackup.disable()
+                Display.msg("Autobackup desactivado")
+                print(Tema.amarillo("\nℹ Los backups nativos de MSX permanecen desactivados"))
+                print(Tema.amarillo("  Puedes reactivarlos manualmente en configuracion.json"))
+                self.utils.logger.info("Autobackup desactivado")
         else:
-            self.config.set("autobackup_enabled", True)
-            Display.msg("Autobackup activado")
-            self.utils.logger.info("Autobackup activado")
+            # Activar - MOSTRAR ADVERTENCIA
+            Display.clear()
+            Display.header("⚠️ ADVERTENCIA: ACTIVAR AUTOBACKUP")
+            
+            print(Tema.amarillo("⚠ Al activar el sistema de autobackup:"))
+            print()
+            print("  1. Los backups nativos de MSX serán DESACTIVADOS")
+            print("  2. El campo 'backup_mode' se limpiará (si es 'luna', quedará vacío)")
+            print("  3. El campo 'backup_auto' se pondrá en true")
+            print()
+            print("Cambios en configuracion.json:")
+            print(Tema.rojo('  "backup_mode": "luna"  ->  "backup_mode": ""'))
+            print(Tema.verde('  "backup_auto": false   ->  "backup_auto": true'))
+            print()
+            print("ℹ Esto evita conflictos entre ambos sistemas de backup")
+            print("ℹ Solo d0ce3tools gestionará los backups automáticos")
+            print()
+            print(Tema.LINE)
+            print()
+            
+            if InputHandler.confirmar("¿Deseas continuar?"):
+                self.autobackup.enable()
+                Display.msg("\nAutobackup activado")
+                Display.msg("Sistema nativo de MSX desactivado")
+                self.utils.logger.info("Autobackup activado - backups nativos desactivados")
+            else:
+                print("\nCancelado")
         
-        print("\n⚠️ Reinicie el proceso para aplicar cambios")
         InputHandler.pausar()
     
     def _cambiar_intervalo(self, intervalo_actual):
