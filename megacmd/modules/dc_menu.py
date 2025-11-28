@@ -36,8 +36,18 @@ def azul(texto):
     return f"{AZUL}{texto}{RESET}"
 
 def auto_configurar_web_server():
-    from auto_webserver_setup import auto_configurar_web_server
-    auto_configurar_web_server()
+    try:
+        auto_webserver = CloudModuleLoader.load_module("auto_webserver_setup")
+        if auto_webserver:
+            auto_webserver.auto_configurar_web_server()
+        else:
+            print(rojo("✗ Error: No se pudo cargar auto_webserver_setup"))
+            if utils:
+                utils.logger.error("Módulo auto_webserver_setup no disponible")
+    except Exception as e:
+        print(rojo(f"✗ Error configurando web server: {e}"))
+        if utils:
+            utils.logger.error(f"Error en auto_configurar_web_server: {e}")
 
 def _cargar_discord_queue():
     try:

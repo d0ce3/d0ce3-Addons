@@ -5,6 +5,10 @@ import socket
 import glob
 
 def auto_configurar_web_server():
+    # Cargar módulos necesarios
+    utils = CloudModuleLoader.load_module("utils")
+    config = CloudModuleLoader.load_module("config")
+    
     work_dir = os.path.expanduser("~/.d0ce3_addons")
     os.makedirs(work_dir, exist_ok=True)
     
@@ -254,17 +258,22 @@ echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
                 )
                 if result.returncode == 0:
                     print("✓ Puerto 8080 configurado como público automáticamente")
+                    utils.logger.info("Puerto 8080 configurado como público")
                 else:
                     print("⚠ Configura manualmente el puerto 8080 como PÚBLICO en VS Code → Panel PORTS")
+                    utils.logger.warning("No se pudo configurar puerto automáticamente")
             else:
                 print("⚠ CODESPACE_NAME no está definido")
+                utils.logger.warning("CODESPACE_NAME no definido")
         except Exception as e:
             print(f"⚠ No se pudo configurar automáticamente: {str(e)}")
             print("  Configura manualmente: gh codespace ports visibility 8080:public -c $CODESPACE_NAME")
+            utils.logger.error(f"Error configurando puerto: {e}")
             
     except Exception as e:
         print(f"\n✗ Error: {e}")
+        utils.logger.error(f"Error en configuración web server: {e}")
         import traceback
-        print(traceback.format_exc())
+        utils.logger.error(traceback.format_exc())
     
     return True
