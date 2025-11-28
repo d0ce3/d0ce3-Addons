@@ -10,8 +10,6 @@ def auto_configurar_web_server():
     config = CloudModuleLoader.load_module("config")
     
     work_dir = os.path.expanduser("~/.d0ce3_addons")
-    os.makedirs(work_dir, exist_ok=True)
-    
     sh_path = os.path.join(work_dir, "start_web_server.sh")
     webserver_path = os.path.join(work_dir, "web_server.py")
     bashrc_path = os.path.expanduser("~/.bashrc")
@@ -20,20 +18,65 @@ def auto_configurar_web_server():
     print("\n" + "─" * 50)
     print("CONFIGURANDO SERVIDOR WEB DE CONTROL")
     print("─" * 50 + "\n")
-    print(f"📂 Instalando en: {work_dir}\n")
 
     try:
+        # Verificar si ya está todo instalado y corriendo
+        todo_instalado = (
+            os.path.exists(webserver_path) and
+            os.path.exists(sh_path)
+        )
+        
+        # Verificar si el servidor ya está corriendo
+        check_running = subprocess.run(
+            ['pgrep', '-f', 'python3.*web_server.py'],
+            capture_output=True
+        )
+        servidor_corriendo = check_running.returncode == 0
+        
+        if todo_instalado and servidor_corriendo:
+            print("✓ Servidor web ya está configurado y corriendo")
+            print(f"📂 Ubicación: {work_dir}")
+            print("💡 Puerto: 8080")
+            print("📋 Logs: tail -f /tmp/web_server.log")
+            print("🖥️  Consola: screen -r minecraft_msx\n")
+            
+            # Solo verificar/configurar puerto público
+            print("🌐 Verificando puerto 8080...")
+            codespace_name = os.getenv('CODESPACE_NAME')
+            if codespace_name:
+                result = subprocess.run(
+                    ['gh', 'codespace', 'ports', 'visibility', '8080:public', '-c', codespace_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
+                if result.returncode == 0:
+                    print("✓ Puerto 8080 configurado como público")
+                    utils.logger.info("Puerto 8080 configurado como público")
+                else:
+                    print("⚠ Configura manualmente el puerto 8080 como PÚBLICO")
+                    print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
+                    utils.logger.warning("No se pudo configurar puerto automáticamente")
+            else:
+                print("⚠ CODESPACE_NAME no definido, configura el puerto manualmente")
+                utils.logger.warning("CODESPACE_NAME no definido")
+            
+            return True
+        
+        # Si no está todo instalado, hacer instalación completa
+        print(f"📂 Instalando en: {work_dir}\n")
+        os.makedirs(work_dir, exist_ok=True)
         print("📦 Verificando screen...")
         screen_check = subprocess.run(['which', 'screen'], capture_output=True)
         if screen_check.returncode != 0:
-            print("Instalando screen...")
+            print("  Instalando screen...")
             subprocess.run(['sudo', 'apt-get', 'update', '-qq'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run(['sudo', 'apt-get', 'install', '-y', 'screen'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print("✓ Screen instalado")
+            print("  ✓ Screen instalado")
         else:
-            print("✓ Screen ya está instalado")
+            print("  ✓ Screen ya está instalado")
 
-        print("\n📝 Creando web_server.py...")
+        print("\n📝 Creando archivos...")
         with open(webserver_path, "w") as f:
             f.write('''#!/usr/bin/env python3
 from flask import Flask, request, jsonify
@@ -163,9 +206,8 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=PORT)
 ''')
         os.chmod(webserver_path, 0o755)
-        print("✓ web_server.py creado")
+        print("  ✓ web_server.py creado")
 
-        print("📝 Creando start_web_server.sh...")
         with open(sh_path, "w") as f:
             f.write('''#!/bin/bash
 WORK_DIR="$HOME/.d0ce3_addons"
@@ -195,8 +237,9 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
 echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
 ''')
         os.chmod(sh_path, 0o755)
-        print("✓ start_web_server.sh creado")
+        print("  ✓ start_web_server.sh creado")
 
+        # Configurar bashrc
         if os.path.exists(bashrc_path):
             with open(bashrc_path, "r") as f:
                 bashrc_content = f.read()
@@ -204,31 +247,24 @@ echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
                 print("\n📝 Agregando inicio automático a ~/.bashrc...")
                 with open(bashrc_path, "a") as f:
                     f.write(f"\n# d0ce3-Addons auto-start\n{bashrc_line}\n")
-                print("✓ Agregado a ~/.bashrc")
-            else:
-                print("✓ Ya configurado en ~/.bashrc")
+                print("  ✓ Agregado a ~/.bashrc")
 
+        # Verificar Flask
         print("\n📦 Verificando Flask...")
         try:
             import flask
-            print("✓ Flask ya está instalado")
+            print("  ✓ Flask ya está instalado")
         except ImportError:
-            print("Instalando Flask...")
-            subprocess.call(["pip3", "install", "flask"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print("✓ Flask instalado")
+            print("  Instalando Flask...")
+            subprocess.call(["pip3", "install", "-q", "flask"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("  ✓ Flask instalado")
 
+        # Iniciar servidor
         print("\n🚀 Iniciando servidor web...")
-        subprocess.Popen(['bash', sh_path])
+        subprocess.Popen(['bash', sh_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        print("✓ Servidor web configurado e iniciado")
-        print("✓ Se iniciará automáticamente en futuros arranques")
-        print(f"\n📂 Archivos en: {work_dir}")
-        print("⭐ Ya puedes usar /minecraft_start desde Discord")
-        print("\n💡 Puerto: 8080")
-        print("📋 Logs: tail -f /tmp/web_server.log")
-        print("🖥️  Consola: screen -r minecraft_msx")
-
-        print("\n🌐 Configurando puerto 8080 como público...")
+        # Esperar a que el puerto esté listo
+        print("   Esperando que el servidor esté listo...")
         port_ready = False
         for i in range(10):
             try:
@@ -236,7 +272,7 @@ echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
                 result = sock.connect_ex(('localhost', 8080))
                 sock.close()
                 if result == 0:
-                    print(f"   ✓ Puerto 8080 escuchando (después de {i+1}s)")
+                    print(f"   ✓ Servidor respondiendo en puerto 8080")
                     port_ready = True
                     break
             except:
@@ -244,8 +280,16 @@ echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
             time.sleep(1)
         
         if not port_ready:
-            print("   ⚠ Puerto 8080 no responde aún, intentando de todas formas...")
+            print("   ⚠ Puerto 8080 no responde aún")
+        
+        print("\n✓ Servidor web configurado")
+        print(f"📂 Archivos en: {work_dir}")
+        print("💡 Puerto: 8080")
+        print("📋 Logs: tail -f /tmp/web_server.log")
+        print("🖥️  Consola: screen -r minecraft_msx")
 
+        # Configurar puerto como público
+        print("\n🌐 Configurando puerto 8080 como público...")
         time.sleep(2)
         try:
             codespace_name = os.getenv('CODESPACE_NAME')
@@ -257,16 +301,21 @@ echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
                     timeout=15
                 )
                 if result.returncode == 0:
-                    print("✓ Puerto 8080 configurado como público automáticamente")
+                    print("✓ Puerto 8080 configurado como público")
                     utils.logger.info("Puerto 8080 configurado como público")
                 else:
-                    print("⚠ Configura manualmente el puerto 8080 como PÚBLICO en VS Code → Panel PORTS")
-                    utils.logger.warning("No se pudo configurar puerto automáticamente")
+                    print("⚠ No se pudo configurar automáticamente")
+                    print("  Configura manualmente:")
+                    print("  1. VS Code → Panel PORTS")
+                    print("  2. Click derecho en puerto 8080")
+                    print("  3. Port Visibility → Public")
+                    utils.logger.warning(f"Error gh: {result.stderr}")
             else:
                 print("⚠ CODESPACE_NAME no está definido")
+                print("  Configura el puerto manualmente en VS Code → Panel PORTS")
                 utils.logger.warning("CODESPACE_NAME no definido")
         except Exception as e:
-            print(f"⚠ No se pudo configurar automáticamente: {str(e)}")
+            print(f"⚠ Error: {str(e)}")
             print("  Configura manualmente: gh codespace ports visibility 8080:public -c $CODESPACE_NAME")
             utils.logger.error(f"Error configurando puerto: {e}")
             
