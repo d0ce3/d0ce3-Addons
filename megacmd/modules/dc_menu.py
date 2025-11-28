@@ -56,8 +56,10 @@ def _auto_configurar_web_server():
         screen_check = subprocess.run(['which', 'screen'], capture_output=True)
         if screen_check.returncode != 0:
             print("Instalando screen...")
-            subprocess.run(['sudo', 'apt-get', 'update', '-qq'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(['sudo', 'apt-get', 'install', '-y', 'screen'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['sudo', 'apt-get', 'update', '-qq'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['sudo', 'apt-get', 'install', '-y', 'screen'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print(verde("✓ Screen instalado"))
         else:
             print(verde("✓ Screen ya está instalado"))
@@ -112,11 +114,9 @@ def execute_minecraft_command(action):
             # Intentar enviar comando stop via screen
             check = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
             if 'minecraft_msx' in check.stdout:
-                # Si hay screen session, enviar echo 2
                 cmd = f'screen -S minecraft_msx -X stuff "2\\n"'
                 subprocess.Popen(cmd, shell=True)
             else:
-                # Fallback: ejecutar directamente
                 cmd = f'cd {repo_root} && echo 2 | python3 msx.py'
                 subprocess.Popen(cmd, shell=True, env=os.environ.copy())
             
@@ -137,7 +137,6 @@ def execute_minecraft_command(action):
             running = bool(java_check.stdout.strip())
             pids = java_check.stdout.strip().split('\\n') if running else []
             
-            # Verificar screen sessions
             screen_check = subprocess.run(['screen', '-ls'], capture_output=True, text=True)
             has_screen = 'minecraft_msx' in screen_check.stdout
             
@@ -209,8 +208,8 @@ if __name__ == '__main__':
 
         print("📝 Creando start_web_server.sh...")
         with open(sh_path, "w") as f:
-            f.write(f'''#!/bin/bash
-WORK_DIR="{work_dir}"
+            f.write('''#!/bin/bash
+WORK_DIR="$HOME/.d0ce3_addons"
 cd "$WORK_DIR"
 
 if pgrep -f "python3.*web_server.py" > /dev/null; then
@@ -218,11 +217,18 @@ if pgrep -f "python3.*web_server.py" > /dev/null; then
     exit 0
 fi
 
+# Generar token si no existe Y guardarlo en bashrc
 if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
-    export WEB_SERVER_AUTH_TOKEN=$(openssl rand -hex 32)
+    NEW_TOKEN=$(openssl rand -hex 32)
+    
+    if ! grep -q "WEB_SERVER_AUTH_TOKEN" ~/.bashrc 2>/dev/null; then
+        echo "export WEB_SERVER_AUTH_TOKEN=\\"$NEW_TOKEN\\"" >> ~/.bashrc
+    fi
+    
+    export WEB_SERVER_AUTH_TOKEN="$NEW_TOKEN"
 fi
 
-PORT=${{PORT:-8080}}
+PORT=${PORT:-8080}
 
 if ! python3 -c "import flask" 2>/dev/null; then
     pip3 install flask >/dev/null 2>&1
@@ -231,6 +237,7 @@ fi
 nohup python3 "$WORK_DIR/web_server.py" > /tmp/web_server.log 2>&1 &
 
 echo "✅ Servidor web iniciado (puerto $PORT)"
+echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
 ''')
         os.chmod(sh_path, 0o755)
         print(verde("✓ start_web_server.sh creado"))
@@ -253,9 +260,11 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
             print(verde("✓ Flask ya está instalado"))
         except ImportError:
             print("Instalando Flask...")
-            resultado = subprocess.call(["pip3", "install", "flask"], 
-                                       stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL)
+            resultado = subprocess.call(
+                ["pip3", "install", "flask"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
             if resultado == 0:
                 print(verde("✓ Flask instalado"))
             else:
@@ -276,7 +285,6 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
         print("\n🌐 Configurando puerto 8080 como público...")
         print("   Esperando que el servidor esté listo...")
 
-        # Esperar hasta que el puerto esté escuchando (máximo 10 segundos)
         import socket
         port_ready = False
         for i in range(10):
@@ -295,7 +303,7 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
         if not port_ready:
             print(amarillo("   ⚠ Puerto 8080 no responde aún, intentando de todas formas..."))
 
-        time.sleep(2)  # Espera adicional por seguridad
+        time.sleep(2)
 
         try:
             codespace_name = os.getenv('CODESPACE_NAME')
@@ -321,7 +329,7 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
             print("  Configura manualmente el puerto 8080 como PÚBLICO en:")
             print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
             print("\n  O ejecuta manualmente:")
-            print(f"  gh codespace ports visibility 8080:public -c $CODESPACE_NAME")
+            print("  gh codespace ports visibility 8080:public -c $CODESPACE_NAME")
         
         try:
             if logger and hasattr(logger, 'info'):
@@ -383,14 +391,12 @@ def menu_principal_discord():
         print(m("│ 2. Configurar integración                      │"))
         print(m("│ 3. Ver información de conexión                 │"))
         print(m("│ 4. Comando sugerido para Discord               │"))
-        
         if discord_queue_disponible:
             print(m("│ 5. Ver estadísticas de la cola                 │"))
             print(m("│ 6. Gestión de eventos                          │"))
         else:
             print(m("│ 5. [Sistema de cola no disponible]            │"))
             print(m("│ 6. [Sistema de cola no disponible]            │"))
-        
         print(m("│ 7. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
         
@@ -429,7 +435,6 @@ def menu_principal_discord():
             else:
                 print(f"{AMARILLO}Opción inválida{RESET}")
                 utils.pausar()
-                
         except ValueError:
             print(f"{AMARILLO}Ingresa un número válido{RESET}")
             utils.pausar()
@@ -502,7 +507,6 @@ def configurar_integracion_completa():
     print(mb("CONFIGURACIÓN DE INTEGRACIÓN DISCORD"))
     print(m("─" * 50) + "\n")
     
-    # Obtener User ID actual
     user_id_actual = config.CONFIG.get("discord_user_id") or os.getenv("DISCORD_USER_ID")
     
     if user_id_actual:
@@ -520,10 +524,8 @@ def configurar_integracion_completa():
         utils.pausar()
         return
     
-    # Guardar User ID
     config.set("discord_user_id", user_id)
     
-    # Webhook URL (auto-detectada, NO modificable por el usuario)
     webhook_url = _detectar_webhook_url()
     
     print("\n" + m("─" * 50))
@@ -549,7 +551,6 @@ def configurar_integracion_completa():
             pass
         
         _auto_configurar_web_server()
-        
     else:
         print(f"{AMARILLO}\n⚠ Error al guardar configuración{RESET}")
         print("Configura manualmente con:")
@@ -583,7 +584,6 @@ def _solicitar_user_id():
 
 
 def _solicitar_webhook_url():
-    # Esta función ya no se usa, pero se mantiene por compatibilidad
     return _detectar_webhook_url()
 
 
@@ -634,7 +634,6 @@ def _configurar_variables_permanentes(user_id, webhook_url):
                 f.write("\n# d0ce3|tools Discord Integration\n")
                 for linea in nuevas_lineas:
                     f.write(linea + "\n")
-            
             print(verde("✓ Variables agregadas a ~/.bashrc"))
         else:
             print(verde("✓ Variables ya configuradas"))
@@ -668,8 +667,7 @@ def mostrar_estadisticas_cola():
         
         if discord_queue is None:
             print(rojo("✗ Sistema de cola no disponible\n"))
-            print("El módulo discord_queue no se pudo cargar.")
-            print("Esto puede deberse a problemas de empaquetado.\n")
+            print("El módulo discord_queue no se pudo cargar.\n")
             utils.pausar()
             return
         
@@ -763,7 +761,6 @@ def menu_gestion_eventos():
             else:
                 print(f"{AMARILLO}Opción inválida{RESET}")
                 utils.pausar()
-                
         except ValueError:
             print(f"{AMARILLO}Ingresa un número válido{RESET}")
             utils.pausar()
