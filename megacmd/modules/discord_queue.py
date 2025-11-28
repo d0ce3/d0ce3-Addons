@@ -63,6 +63,9 @@ class SQLiteProxy:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.helper_script = self._create_helper_script()
+        result = self.init_db()
+        if not result.get("success"):
+            _log("ERROR", f"No se pudo inicializar BD: {result.get('error')}")
     
     def _create_helper_script(self) -> str:
         script_path = '/tmp/discord_queue_helper.py'
