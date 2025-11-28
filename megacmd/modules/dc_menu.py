@@ -502,26 +502,17 @@ def configurar_integracion_completa():
     print(mb("CONFIGURACIÓN DE INTEGRACIÓN DISCORD"))
     print(m("─" * 50) + "\n")
     
-    print("Este asistente te guiará paso a paso para configurar")
-    print("la integración completa con Discord.\n")
+    # Obtener User ID actual
+    user_id_actual = config.CONFIG.get("discord_user_id") or os.getenv("DISCORD_USER_ID")
     
-    if not utils.confirmar("¿Continuar?"):
-        print(rojo("\nCancelado"))
-        utils.pausar()
-        return
-    
-    print("\n" + m("─" * 50))
-    print(mb("PASO 1/2 - Discord User ID"))
-    print(m("─" * 50) + "\n")
-    
-    user_id_actual = config.CONFIG.get("discord_user_id", "")
     if user_id_actual:
-        print(f"User ID actual: {user_id_actual}\n")
+        print(f"User ID configurado: {verde(user_id_actual)}\n")
         if not utils.confirmar("¿Cambiar User ID?"):
             user_id = user_id_actual
         else:
             user_id = _solicitar_user_id()
     else:
+        print("No hay User ID configurado.\n")
         user_id = _solicitar_user_id()
     
     if not user_id:
@@ -529,48 +520,26 @@ def configurar_integracion_completa():
         utils.pausar()
         return
     
+    # Guardar User ID
     config.set("discord_user_id", user_id)
-    print(verde(f"\n✓ User ID guardado: {user_id}"))
     
-    print("\n" + m("─" * 50))
-    print(mb("PASO 2/2 - URL del Webhook"))
-    print(m("─" * 50) + "\n")
-    
-    webhook_actual = os.getenv("DISCORD_WEBHOOK_URL", "")
-    if webhook_actual:
-        print(f"Webhook actual: {webhook_actual}\n")
-        if not utils.confirmar("¿Cambiar webhook URL?"):
-            webhook_url = webhook_actual
-        else:
-            webhook_url = _solicitar_webhook_url()
-    else:
-        webhook_url = _solicitar_webhook_url()
-    
-    if not webhook_url:
-        print(f"{AMARILLO}\nSe omitió la configuración del webhook{RESET}")
-        print("Podrás configurarlo después exportando manualmente:")
-        print(f"  export DISCORD_WEBHOOK_URL='tu_url_aqui'")
-        utils.pausar()
-        return
+    # Webhook URL (auto-detectada, NO modificable por el usuario)
+    webhook_url = _detectar_webhook_url()
     
     print("\n" + m("─" * 50))
     print(mb("APLICANDO CONFIGURACIÓN"))
     print(m("─" * 50) + "\n")
     
-    print("Configurando variables de entorno de forma permanente...\n")
+    print("Configurando variables de entorno...\n")
     
     exito = _configurar_variables_permanentes(user_id, webhook_url)
     
     if exito:
-        print(verde("\n✓ Configuración completa y permanente"))
-        print("\nLas variables están configuradas en ~/.bashrc")
-        print("Se cargarán automáticamente en cada inicio.\n")
-        
-        print(mb("Resumen:"))
-        print(f"  User ID: {user_id}")
-        print(f"  Webhook: {webhook_url}\n")
-        
-        print(verde("✓ Notificaciones de backup activadas"))
+        print(verde("\n✓ Configuración completa"))
+        print("\n" + mb("Resumen:"))
+        print(f"  Discord User ID: {user_id}")
+        print(f"  Bot Webhook:     {webhook_url}")
+        print("\n" + verde("✓ Notificaciones de backup activadas"))
         print(verde("✓ Sistema de cola iniciado"))
         
         try:
@@ -582,8 +551,8 @@ def configurar_integracion_completa():
         _auto_configurar_web_server()
         
     else:
-        print(f"{AMARILLO}\n⚠ Configuración parcial{RESET}")
-        print("Deberás exportar manualmente las variables:")
+        print(f"{AMARILLO}\n⚠ Error al guardar configuración{RESET}")
+        print("Configura manualmente con:")
         print(f"  export DISCORD_USER_ID='{user_id}'")
         print(f"  export DISCORD_WEBHOOK_URL='{webhook_url}'")
     
@@ -591,52 +560,31 @@ def configurar_integracion_completa():
 
 
 def _solicitar_user_id():
-    print("Cómo obtener tu Discord User ID:")
+    print(mb("Cómo obtener tu Discord User ID:"))
     print("  1. Abre Discord")
-    print("  2. Configuración → Avanzado → Modo Desarrollador (activar)")
-    print("  3. Clic derecho en tu perfil → Copiar ID de usuario\n")
+    print("  2. Configuración → Avanzado → Modo Desarrollador " + verde("(Activar)"))
+    print("  3. Clic derecho en tu perfil → " + verde("Copiar ID de usuario"))
+    print()
     
     while True:
-        nuevo_id = input(m("Discord User ID (Enter para cancelar): ")).strip()
+        nuevo_id = input(m("Tu Discord User ID: ")).strip()
         
         if not nuevo_id:
-            return None
+            if utils.confirmar("\n¿Cancelar configuración?"):
+                return None
+            continue
         
         if nuevo_id.isdigit() and len(nuevo_id) >= 17:
             return nuevo_id
         else:
             print(rojo("\n✗ ID inválido"))
-            print("  • Debe ser solo números")
-            print("  • Mínimo 17 dígitos")
-            print("  • Ejemplo: 123456789012345678\n")
+            print("  Debe ser solo números (mín. 17 dígitos)")
+            print(f"  Ejemplo: {amarillo('331904820590018562')}\n")
 
 
 def _solicitar_webhook_url():
-    print("Detectando URL del bot...\n")
-    
-    webhook_url = _detectar_webhook_url()
-    
-    if webhook_url:
-        print(verde(f"✓ URL detectada: {webhook_url}\n"))
-        return webhook_url
-    else:
-        print(f"{AMARILLO}⚠ No se pudo detectar automáticamente{RESET}\n")
-        print("Ingresa la URL manualmente:")
-        print("  Render:   https://nombre-app.onrender.com/webhook/megacmd")
-        print("  Railway:  https://nombre-app.up.railway.app/webhook/megacmd\n")
-        
-        webhook_manual = input(m("Webhook URL (Enter para omitir): ")).strip()
-        
-        if not webhook_manual:
-            return None
-        
-        if not (webhook_manual.startswith("http://") or webhook_manual.startswith("https://")):
-            print(f"{AMARILLO}\n⚠ URL debe comenzar con http:// o https://{RESET}")
-            if utils.confirmar("¿Continuar de todas formas?"):
-                return webhook_manual
-            return None
-        
-        return webhook_manual
+    # Esta función ya no se usa, pero se mantiene por compatibilidad
+    return _detectar_webhook_url()
 
 
 def _detectar_webhook_url():
@@ -689,7 +637,7 @@ def _configurar_variables_permanentes(user_id, webhook_url):
             
             print(verde("✓ Variables agregadas a ~/.bashrc"))
         else:
-            print(f"{AMARILLO}⚠ Variables ya existen en ~/.bashrc{RESET}")
+            print(verde("✓ Variables ya configuradas"))
         
         os.environ["DISCORD_USER_ID"] = user_id
         os.environ["DISCORD_WEBHOOK_URL"] = webhook_url
