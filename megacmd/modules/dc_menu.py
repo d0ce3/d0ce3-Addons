@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 
 DISCORD_BOT_INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1331828744985509959&permissions=8&scope=bot%20applications.commands"
 
