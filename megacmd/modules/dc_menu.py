@@ -1,7 +1,3 @@
-"""
-Módulo de menú para integración con Discord
-Maneja la UI y presentación de información relacionada con el bot de Discord
-"""
 import os
 import subprocess
 
@@ -23,38 +19,26 @@ RESET = "\033[0m"
 BOLD = "\033[1m"
 
 def m(texto):
-    """Texto en morado"""
     return f"{MORADO}{texto}{RESET}"
 
 def mb(texto):
-    """Texto en morado bold"""
+
     return f"{BOLD}{MORADO}{texto}{RESET}"
 
 def verde(texto):
-    """Texto en verde"""
     return f"{VERDE}{texto}{RESET}"
 
 def rojo(texto):
-    """Texto en rojo"""
     return f"{ROJO}{texto}{RESET}"
 
 def amarillo(texto):
-    """Texto en amarillo"""
     return f"{AMARILLO}{texto}{RESET}"
 
 def azul(texto):
-    """Texto en azul"""
     return f"{AZUL}{texto}{RESET}"
 
 
 def _auto_configurar_web_server():
-    """
-    Configura automáticamente el servidor web de control de Minecraft
-    - Crea start_web_server.sh si no existe
-    - Lo agrega a ~/.bashrc para arranque automático
-    - Instala Flask si hace falta
-    - Inicia el servidor web inmediatamente
-    """
     workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
     addon_path = f"{workspace}/d0ce3-Addons"
     sh_path = os.path.join(addon_path, "start_web_server.sh")
@@ -66,7 +50,6 @@ def _auto_configurar_web_server():
     print(m("─" * 50) + "\n")
 
     try:
-        # 1. Crear script si no existe
         if not os.path.exists(sh_path):
             print("📝 Creando start_web_server.sh...")
             with open(sh_path, "w") as f:
@@ -108,7 +91,7 @@ echo "========================================="
         else:
             print(verde("✓ start_web_server.sh ya existe"))
 
-        # 2. Agregar al bashrc si no está
+
         if os.path.exists(bashrc_path):
             with open(bashrc_path, "r") as f:
                 bashrc_content = f.read()
@@ -122,7 +105,6 @@ echo "========================================="
             else:
                 print(verde("✓ Ya está configurado en ~/.bashrc"))
         
-        # 3. Verificar/Instalar Flask
         print("\n📦 Verificando Flask...")
         try:
             import flask
@@ -167,7 +149,6 @@ echo "========================================="
 
 
 def menu_principal_discord():
-    """Menú principal unificado para Discord"""
     while True:
         utils.limpiar_pantalla()
         
@@ -244,7 +225,6 @@ def menu_principal_discord():
 
 
 def mostrar_info_bot():
-    """Muestra información completa del bot"""
     utils.limpiar_pantalla()
     
     print("\n" + m("─" * 50))
@@ -303,7 +283,6 @@ def mostrar_info_bot():
 
 
 def configurar_integracion_completa():
-    """Configuración paso a paso completa"""
     utils.limpiar_pantalla()
     
     print("\n" + m("─" * 50))
@@ -338,11 +317,10 @@ def configurar_integracion_completa():
         utils.pausar()
         return
     
-    # Guardar User ID
+
     config.set("discord_user_id", user_id)
     print(verde(f"\n✓ User ID guardado: {user_id}"))
     
-    # Paso 2: Webhook URL
     print("\n" + m("─" * 50))
     print(mb("PASO 2/2 - URL del Webhook"))
     print(m("─" * 50) + "\n")
@@ -350,7 +328,7 @@ def configurar_integracion_completa():
     webhook_actual = os.getenv("DISCORD_WEBHOOK_URL", "")
     if webhook_actual:
         print(f"Webhook actual: {webhook_actual}\n")
-        if not utils.confirmar("¿Cambiar webhook URL?"):
+        if not utils.confirmar("¿Cambiar webhook URL? (no recomendado cambiar, solamente dar a si) "):
             webhook_url = webhook_actual
         else:
             webhook_url = _solicitar_webhook_url()
@@ -421,7 +399,6 @@ def _solicitar_user_id():
 
 
 def _solicitar_webhook_url():
-    """Detecta automáticamente la URL del webhook"""
     print("Detectando URL del bot...\n")
     
     # Detectar automáticamente
@@ -452,12 +429,6 @@ def _solicitar_webhook_url():
 
 
 def _detectar_webhook_url():
-    """
-    Detecta automáticamente la URL del webhook según el entorno
-    
-    Returns:
-        str: URL detectada o None
-    """
     # Detectar Render
     render_service = os.getenv("RENDER_SERVICE_NAME")
     render_external_url = os.getenv("RENDER_EXTERNAL_URL")
@@ -481,7 +452,6 @@ def _detectar_webhook_url():
 
 
 def _configurar_variables_permanentes(user_id, webhook_url):
-    """Configura las variables en ~/.bashrc de forma permanente"""
     try:
         bashrc_path = os.path.expanduser("~/.bashrc")
         
@@ -578,7 +548,6 @@ def mostrar_estadisticas_cola():
 
 
 def menu_gestion_eventos():
-    """Menú para gestionar eventos de la cola"""
     while True:
         utils.limpiar_pantalla()
         
@@ -598,7 +567,7 @@ def menu_gestion_eventos():
         print(m("┌────────────────────────────────────────────────┐"))
         print(m("│ 1. Ver eventos fallidos                        │"))
         print(m("│ 2. Reintentar evento fallido                   │"))
-        print(m("│ 3. Limpiar eventos antiguos (7+ días)         │"))
+        print(m("│ 3. Limpiar eventos antiguos (7+ días)          │"))
         print(m("│ 4. Ver todos los eventos pendientes            │"))
         print(m("│ 5. Volver                                      │"))
         print(m("└────────────────────────────────────────────────┘"))
@@ -666,7 +635,6 @@ def _ver_eventos_fallidos():
 
 
 def _reintentar_evento():
-    """Reintenta un evento fallido"""
     try:
         event_id = input(m("ID del evento a reintentar: ")).strip()
         
@@ -688,7 +656,6 @@ def _reintentar_evento():
 
 
 def _limpiar_eventos_antiguos():
-    """Limpia eventos procesados antiguos"""
     print("\n" + m("─" * 50))
     print(mb("LIMPIAR EVENTOS ANTIGUOS"))
     print(m("─" * 50) + "\n")
@@ -741,7 +708,6 @@ def _ver_eventos_pendientes():
 
 
 def _mostrar_info_conexion_wrapper():
-    """Wrapper para llamar a dc_codespace.mostrar_info_conexion()"""
     try:
         dc_codespace = CloudModuleLoader.load_module("dc_codespace")
         if dc_codespace:
@@ -755,7 +721,6 @@ def _mostrar_info_conexion_wrapper():
 
 
 def _mostrar_comando_sugerido_wrapper():
-    """Wrapper para llamar a dc_codespace.mostrar_comando_sugerido()"""
     try:
         dc_codespace = CloudModuleLoader.load_module("dc_codespace")
         if dc_codespace:

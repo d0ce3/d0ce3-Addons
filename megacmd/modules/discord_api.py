@@ -22,9 +22,6 @@ except Exception as e:
 
 
 class DiscordAPI:
-    """
-    API Flask para exponer eventos Discord
-    """
     
     def __init__(self, app: Optional[Flask] = None):
         self.app = app
@@ -32,15 +29,9 @@ class DiscordAPI:
             self.register_routes()
     
     def register_routes(self):
-        """Registra las rutas en la aplicación Flask"""
         
         @self.app.route('/discord/events', methods=['GET'])
         def get_events():
-            """
-            GET /discord/events?limit=50&max_attempts=3
-            
-            Retorna eventos pendientes de la cola
-            """
             try:
                 limit = int(request.args.get('limit', 50))
                 max_attempts = int(request.args.get('max_attempts', 3))
@@ -73,11 +64,6 @@ class DiscordAPI:
         
         @self.app.route('/discord/events/<int:event_id>/processed', methods=['POST'])
         def mark_processed(event_id):
-            """
-            POST /discord/events/{event_id}/processed
-            
-            Marca un evento como procesado
-            """
             try:
                 if not queue:
                     return jsonify({
@@ -101,12 +87,6 @@ class DiscordAPI:
         
         @self.app.route('/discord/events/<int:event_id>/failed', methods=['POST'])
         def mark_failed(event_id):
-            """
-            POST /discord/events/{event_id}/failed
-            Body: {"error_message": "mensaje"}
-            
-            Marca un evento como fallido
-            """
             try:
                 if not queue:
                     return jsonify({
@@ -133,11 +113,6 @@ class DiscordAPI:
         
         @self.app.route('/discord/stats', methods=['GET'])
         def get_stats():
-            """
-            GET /discord/stats
-            
-            Retorna estadísticas de la cola
-            """
             try:
                 if not queue:
                     return jsonify({
@@ -162,11 +137,6 @@ class DiscordAPI:
         
         @self.app.route('/discord/health', methods=['GET'])
         def health_check():
-            """
-            GET /discord/health
-            
-            Health check del sistema
-            """
             return jsonify({
                 'success': True,
                 'status': 'healthy',
@@ -177,11 +147,6 @@ class DiscordAPI:
         
         @self.app.route('/discord/cleanup', methods=['POST'])
         def cleanup_old_events():
-            """
-            POST /discord/cleanup?days=7
-            
-            Limpia eventos antiguos
-            """
             try:
                 if not queue:
                     return jsonify({
@@ -206,14 +171,6 @@ class DiscordAPI:
 
 
 def create_standalone_app(host='0.0.0.0', port=8080, debug=False):
-    """
-    Crea y ejecuta una aplicación Flask standalone para la API
-    
-    Args:
-        host: Host a escuchar
-        port: Puerto a escuchar
-        debug: Modo debug
-    """
     if not FLASK_AVAILABLE:
         print("❌ Flask no está instalado")
         return None
@@ -244,9 +201,6 @@ def create_standalone_app(host='0.0.0.0', port=8080, debug=False):
 
 
 def run_api_server(host='0.0.0.0', port=8080, debug=False):
-    """
-    Ejecuta el servidor API de forma standalone
-    """
     app = create_standalone_app(host, port, debug)
     if app:
         app.run(host=host, port=port, debug=debug)

@@ -62,23 +62,11 @@ class DiscordQueue:
         conn.close()
     
     def _get_connection(self):
-        """Obtiene una conexión a la base de datos"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
     
     def add_event(self, user_id: str, event_type: str, payload: dict) -> int:
-        """
-        Agrega un nuevo evento a la cola
-        
-        Args:
-            user_id: ID del usuario Discord
-            event_type: Tipo de evento (backup_error, minecraft_status, etc)
-            payload: Datos del evento
-        
-        Returns:
-            int: ID del evento creado
-        """
         conn = self._get_connection()
         cursor = conn.cursor()
         

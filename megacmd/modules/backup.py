@@ -45,7 +45,6 @@ def comprimir_con_manejo_archivos_activos(carpeta_origen, archivo_destino, max_i
         try:
             utils.logger.info(f"Intento {intento}/{max_intentos} de compresión")
             
-            # Limpiar archivo previo si existe de intento anterior
             if os.path.exists(backup_path):
                 try:
                     os.remove(backup_path)
@@ -74,7 +73,6 @@ def comprimir_con_manejo_archivos_activos(carpeta_origen, archivo_destino, max_i
             # Verificar resultado
             # zip retorna 0=ok, 2=warnings (archivos cambiaron pero zip ok), 18=algunos archivos no legibles
             if resultado.returncode in [0, 2, 12, 18]:
-                # Verificar que el archivo existe y tiene tamaño > 0
                 if os.path.exists(backup_path) and os.path.getsize(backup_path) > 1024:
                     size_mb = os.path.getsize(backup_path) / (1024 * 1024)
                     
@@ -111,7 +109,6 @@ def comprimir_con_manejo_archivos_activos(carpeta_origen, archivo_destino, max_i
             error = "Timeout en compresión (>10 min)"
             utils.logger.error(error)
             
-            # Limpiar archivo corrupto
             if os.path.exists(backup_path):
                 try:
                     os.remove(backup_path)
@@ -139,8 +136,6 @@ def comprimir_con_manejo_archivos_activos(carpeta_origen, archivo_destino, max_i
             else:
                 return (False, None, error)
     
-    # Si llegamos aquí, todos los intentos fallaron
-    # Limpiar cualquier archivo corrupto
     if os.path.exists(backup_path):
         try:
             os.remove(backup_path)
@@ -292,7 +287,6 @@ def ejecutar_backup_manual():
         print("⏳ Comprimiendo (puede tomar varios minutos)...")
         print("💡 Esto es normal si el servidor está en uso")
         
-        # Usar la nueva función con reintentos
         exito, backup_path, error = comprimir_con_manejo_archivos_activos(
             server_folder, 
             backup_name,
@@ -420,7 +414,6 @@ def ejecutar_backup_automatico():
         utils.logger.info(f"Nombre de backup: {backup_name}")
         utils.logger.info("Iniciando compresión automática con reintentos...")
         
-        # Usar la nueva función con reintentos automáticos
         exito, backup_path, error = comprimir_con_manejo_archivos_activos(
             server_folder,
             backup_name,

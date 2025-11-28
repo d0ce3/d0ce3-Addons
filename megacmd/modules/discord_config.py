@@ -19,14 +19,12 @@ class DiscordConfig:
         self._initialized = True
     
     def _load(self):
-        """Carga la configuración desde múltiples fuentes con prioridad"""
         self.user_id = self._get_user_id()
         self.webhook_url = self._get_webhook_url()
         self.codespace_name = os.getenv("CODESPACE_NAME")
         self.codespace_url = self._detect_codespace_url()
     
     def _get_user_id(self) -> Optional[str]:
-        """Obtiene el User ID con prioridad: ENV > config.py"""
         user_id = os.getenv("DISCORD_USER_ID")
         if user_id:
             return user_id
@@ -43,7 +41,6 @@ class DiscordConfig:
         return None
     
     def _get_webhook_url(self) -> Optional[str]:
-        """Obtiene la URL del webhook con auto-detección"""
         webhook = os.getenv("DISCORD_WEBHOOK_URL")
         if webhook and webhook != "http://localhost:10000/webhook/megacmd":
             return webhook
@@ -55,10 +52,6 @@ class DiscordConfig:
         return webhook
     
     def _detect_webhook_url(self) -> Optional[str]:
-        """
-        Auto-detecta la URL del webhook según el entorno
-        Prioridad: Render > Railway > Hardcoded
-        """
         render_external = os.getenv("RENDER_EXTERNAL_URL")
         if render_external:
             return f"{render_external}/webhook/megacmd"
@@ -78,25 +71,19 @@ class DiscordConfig:
         return "https://doce-bt.onrender.com/webhook/megacmd"
     
     def _detect_codespace_url(self) -> Optional[str]:
-        """
-        Detecta la URL pública del Codespace
-        Formato: https://{codespace_name}-{port}.app.github.dev
-        """
         if not self.codespace_name:
             return None
         
         return f"https://{self.codespace_name}-8080.app.github.dev"
     
     def is_valid(self) -> bool:
-        """Verifica si la configuración es válida"""
         return bool(self.user_id and self.webhook_url)
     
     def reload(self):
-        """Recarga la configuración"""
+
         self._load()
     
     def get_status(self) -> dict:
-        """Retorna el estado actual de la configuración"""
         return {
             'user_id': bool(self.user_id),
             'user_id_value': self.user_id[:8] + '...' if self.user_id else None,

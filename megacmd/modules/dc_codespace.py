@@ -7,12 +7,6 @@ config = CloudModuleLoader.load_module("config")
 
 
 def obtener_nombre_codespace():
-    """
-    Obtiene el nombre del Codespace actual
-    
-    Returns:
-        str: Nombre del codespace o None si no se detecta
-    """
     codespace_name = os.getenv("CODESPACE_NAME")
     
     if codespace_name:
@@ -24,12 +18,6 @@ def obtener_nombre_codespace():
 
 
 def leer_configuracion_msx():
-    """
-    Lee el archivo configuracion.json de MSX
-    
-    Returns:
-        dict: Configuración de MSX o None si no existe
-    """
     workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
     config_path = os.path.join(workspace, "configuracion.json")
     
@@ -48,12 +36,6 @@ def leer_configuracion_msx():
 
 
 def obtener_ip_desde_playit():
-    """
-    Obtiene la IP desde el archivo de configuración de playit
-    
-    Returns:
-        str: IP de playit o None
-    """
     try:
         # Buscar archivo de configuración de playit
         workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
@@ -98,12 +80,6 @@ def obtener_ip_desde_playit():
 
 
 def obtener_ip_desde_tailscale():
-    """
-    Obtiene la IP desde tailscale
-    
-    Returns:
-        str: IP de tailscale o None
-    """
     try:
         result = subprocess.run(
             ["tailscale", "ip"],
@@ -129,12 +105,6 @@ def obtener_ip_desde_tailscale():
 
 
 def obtener_ip_desde_zerotier():
-    """
-    Obtiene la IP desde zerotier
-    
-    Returns:
-        str: IP de zerotier o None
-    """
     try:
         result = subprocess.run(
             ["zerotier-cli", "listnetworks"],
@@ -167,13 +137,6 @@ def obtener_ip_desde_zerotier():
 
 
 def obtener_ip_codespace():
-    """
-    Obtiene la IP correcta según el servicio configurado en MSX
-    
-    Returns:
-        str: IP del servicio configurado o None
-    """
-    # Leer configuración de MSX
     configuracion_msx = leer_configuracion_msx()
     
     if not configuracion_msx:
@@ -208,12 +171,6 @@ def obtener_ip_codespace():
 
 
 def obtener_puertos_abiertos():
-    """
-    Obtiene los puertos que están escuchando en el Codespace
-    
-    Returns:
-        list: Lista de puertos abiertos
-    """
     try:
         result = subprocess.run(
             ["ss", "-tuln"],
@@ -246,12 +203,6 @@ def obtener_puertos_abiertos():
 
 
 def detectar_servidor_minecraft():
-    """
-    Intenta detectar si hay un servidor de Minecraft corriendo
-    
-    Returns:
-        dict: Información del servidor o None
-    """
     puertos_minecraft = [25565, 25566, 25567, 25575]  # Incluye RCON
     puertos_abiertos = obtener_puertos_abiertos()
     
@@ -271,12 +222,6 @@ def detectar_servidor_minecraft():
 
 
 def generar_ip_minecraft():
-    """
-    Genera la IP completa para conectarse al servidor Minecraft
-    
-    Returns:
-        str: IP:puerto o None
-    """
     info_servidor = detectar_servidor_minecraft()
     
     if not info_servidor:
@@ -300,12 +245,6 @@ def generar_ip_minecraft():
 
 
 def verificar_configuracion_discord():
-    """
-    Verifica que la configuración de Discord esté completa
-    
-    Returns:
-        dict: Estado de la configuración
-    """
     estado = {
         "user_id_config": bool(config.CONFIG.get("discord_user_id")),
         "user_id_env": bool(os.getenv("DISCORD_USER_ID")),
@@ -314,7 +253,6 @@ def verificar_configuracion_discord():
         "configuracion_completa": False
     }
     
-    # Configuración mínima necesaria
     estado["configuracion_completa"] = (
         (estado["user_id_config"] or estado["user_id_env"]) and
         estado["webhook_url"]
@@ -323,7 +261,6 @@ def verificar_configuracion_discord():
     return estado
 
 
-# Colores del tema
 MORADO = "\033[95m"
 VERDE = "\033[92m"
 AMARILLO = "\033[93m"
@@ -350,7 +287,6 @@ def mostrar_info_conexion():
     print(mb("INFORMACIÓN DE CONEXIÓN"))
     print(m("─" * 50) + "\n")
     
-    # Nombre del Codespace
     codespace_name = obtener_nombre_codespace()
     if codespace_name:
         print(verde(f"✓ Codespace: {codespace_name}"))
@@ -366,7 +302,6 @@ def mostrar_info_conexion():
     else:
         print(amarillo("⚠ configuracion.json no encontrado"))
     
-    # IP del servicio
     print()
     ip = obtener_ip_codespace()
     if ip:
@@ -422,12 +357,6 @@ def mostrar_info_conexion():
 
 
 def generar_comando_discord():
-    """
-    Genera el comando de Discord sugerido para iniciar el servidor
-    
-    Returns:
-        str: Comando sugerido o None
-    """
     ip_minecraft = generar_ip_minecraft()
     
     if not ip_minecraft:
@@ -455,7 +384,6 @@ def mostrar_comando_sugerido():
         print("  • Monitorea el servidor cada minuto")
         print("  • Te notifica cuando cambie el estado\n")
         
-        # Intentar copiar
         try:
             import pyperclip
             if utils.confirmar("¿Copiar comando?"):
@@ -486,12 +414,6 @@ def mostrar_comando_sugerido():
 
 
 def verificar_java_corriendo():
-    """
-    Verifica si hay un proceso Java corriendo (probablemente Minecraft)
-    
-    Returns:
-        bool: True si hay Java corriendo
-    """
     try:
         result = subprocess.run(
             ["pgrep", "-f", "java"],
@@ -512,16 +434,9 @@ def verificar_java_corriendo():
 
 
 def obtener_uso_recursos():
-    """
-    Obtiene información sobre el uso de recursos del sistema
-    
-    Returns:
-        dict: CPU, memoria, disco
-    """
     recursos = {}
     
     try:
-        # CPU - usar uptime para carga promedio
         result = subprocess.run(
             ["uptime"],
             capture_output=True,
@@ -531,7 +446,6 @@ def obtener_uso_recursos():
         if result.returncode == 0:
             recursos['uptime'] = result.stdout.strip()
         
-        # Memoria
         result = subprocess.run(
             ["free", "-h"],
             capture_output=True,
@@ -541,7 +455,6 @@ def obtener_uso_recursos():
         if result.returncode == 0:
             recursos['memoria'] = result.stdout.strip()
         
-        # Disco
         result = subprocess.run(
             ["df", "-h", "/"],
             capture_output=True,
@@ -557,7 +470,6 @@ def obtener_uso_recursos():
     return recursos
 
 
-# Funciones exportadas
 __all__ = [
     'obtener_nombre_codespace',
     'leer_configuracion_msx',

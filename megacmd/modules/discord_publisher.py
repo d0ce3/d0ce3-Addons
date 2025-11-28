@@ -17,19 +17,13 @@ except Exception as e:
 
 
 class EventPublisher:
-    """
-    Publisher centralizado de eventos Discord
-    Maneja la lógica de publicación a la cola
-    """
-    
+
     @staticmethod
     def is_enabled() -> bool:
-        """Verifica si el sistema de notificaciones está habilitado"""
         return config is not None and config.is_valid()
     
     @staticmethod
     def _ensure_codespace_info(payload: dict) -> dict:
-        """Agrega información del Codespace al payload"""
         if 'codespace_name' not in payload:
             payload['codespace_name'] = config.codespace_name or "Desconocido"
         
@@ -40,17 +34,6 @@ class EventPublisher:
     
     @staticmethod
     def publish_event(event_type: str, payload: dict, user_id: Optional[str] = None) -> bool:
-        """
-        Publica un evento genérico a la cola
-        
-        Args:
-            event_type: Tipo de evento
-            payload: Datos del evento
-            user_id: ID del usuario (opcional, usa el de config si no se provee)
-        
-        Returns:
-            bool: True si se publicó exitosamente
-        """
         if not EventPublisher.is_enabled():
             if utils:
                 utils.logger.debug("Sistema de notificaciones Discord deshabilitado")
@@ -84,17 +67,7 @@ class EventPublisher:
     @staticmethod
     def publish_backup_error(error_type: str, error_message: str, 
                             backup_file: Optional[str] = None) -> bool:
-        """
-        Publica un error de backup
-        
-        Args:
-            error_type: 'compression', 'upload', 'general'
-            error_message: Mensaje descriptivo del error
-            backup_file: Nombre del archivo de backup (opcional)
-        
-        Returns:
-            bool: True si se publicó exitosamente
-        """
+
         payload = {
             'error_type': f"backup_{error_type}",
             'error_message': error_message,
@@ -106,17 +79,6 @@ class EventPublisher:
     @staticmethod
     def publish_backup_success(backup_file: str, size_mb: float, 
                               duration_seconds: float) -> bool:
-        """
-        Publica un backup exitoso
-        
-        Args:
-            backup_file: Nombre del archivo
-            size_mb: Tamaño en MB
-            duration_seconds: Duración del proceso
-        
-        Returns:
-            bool: True si se publicó exitosamente
-        """
         payload = {
             'backup_file': backup_file,
             'size_mb': round(size_mb, 2),
@@ -128,18 +90,7 @@ class EventPublisher:
     @staticmethod
     def publish_minecraft_status(status: str, ip: Optional[str] = None, 
                                 port: int = 25565, players_online: int = 0) -> bool:
-        """
-        Publica el estado del servidor Minecraft
-        
-        Args:
-            status: 'online', 'offline', 'starting', 'stopping'
-            ip: IP del servidor
-            port: Puerto del servidor
-            players_online: Jugadores conectados
-        
-        Returns:
-            bool: True si se publicó exitosamente
-        """
+
         payload = {
             'status': status,
             'ip': ip,
@@ -151,16 +102,6 @@ class EventPublisher:
     
     @staticmethod
     def publish_codespace_status(action: str, details: Optional[dict] = None) -> bool:
-        """
-        Publica el estado del Codespace
-        
-        Args:
-            action: 'started', 'stopped', 'error'
-            details: Detalles adicionales
-        
-        Returns:
-            bool: True si se publicó exitosamente
-        """
         payload = {
             'action': action,
             'details': details or {}
@@ -170,7 +111,6 @@ class EventPublisher:
     
     @staticmethod
     def get_queue_stats() -> Dict:
-        """Retorna estadísticas de la cola"""
         if not queue:
             return {'error': 'Queue not initialized'}
         

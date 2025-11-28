@@ -76,9 +76,6 @@ def enviar_notificacion_error(
 
 
 def _enviar_directo(user_id: str, error_type: str, error_message: str, codespace_name: str = None):
-    """
-    Envío directo HTTP al webhook (modo fallback)
-    """
     try:
         if not codespace_name:
             codespace_name = os.getenv("CODESPACE_NAME", "Desconocido")
@@ -141,16 +138,6 @@ def _enviar_directo(user_id: str, error_type: str, error_message: str, codespace
 
 
 def notificar_error_compresion(user_id: str, error_message: str):
-    """
-    Notifica un error durante la compresión del backup
-    
-    Args:
-        user_id: ID del usuario de Discord
-        error_message: Descripción del error
-    
-    Returns:
-        bool: True si se envió correctamente
-    """
     if QUEUE_SYSTEM_AVAILABLE and publisher:
         return publisher.publish_backup_error('compression', error_message)
     
@@ -162,16 +149,6 @@ def notificar_error_compresion(user_id: str, error_message: str):
 
 
 def notificar_error_subida(user_id: str, error_message: str):
-    """
-    Notifica un error durante la subida a MEGA
-    
-    Args:
-        user_id: ID del usuario de Discord
-        error_message: Descripción del error
-    
-    Returns:
-        bool: True si se envió correctamente
-    """
     if QUEUE_SYSTEM_AVAILABLE and publisher:
         return publisher.publish_backup_error('upload', error_message)
     
@@ -183,16 +160,6 @@ def notificar_error_subida(user_id: str, error_message: str):
 
 
 def notificar_error_general(user_id: str, error_message: str):
-    """
-    Notifica un error general en el backup
-    
-    Args:
-        user_id: ID del usuario de Discord
-        error_message: Descripción del error
-    
-    Returns:
-        bool: True si se envió correctamente
-    """
     if QUEUE_SYSTEM_AVAILABLE and publisher:
         return publisher.publish_backup_error('general', error_message)
     
@@ -204,13 +171,6 @@ def notificar_error_general(user_id: str, error_message: str):
 
 
 def obtener_user_id():
-    """
-    Obtiene el user_id del propietario desde el archivo de configuración
-    o desde una variable de entorno
-    
-    Returns:
-        str: User ID o None si no está configurado
-    """
     if QUEUE_SYSTEM_AVAILABLE and config:
         return config.user_id
     
@@ -231,7 +191,6 @@ def obtener_user_id():
 
 
 def verificar_configuracion():
-    """Verifica el estado de la configuración Discord"""
     if QUEUE_SYSTEM_AVAILABLE and config:
         status = config.get_status()
         return {
@@ -256,7 +215,6 @@ def verificar_configuracion():
 
 
 def probar_notificacion():
-    """Prueba el sistema de notificaciones"""
     user_id = obtener_user_id()
     
     if not user_id:
