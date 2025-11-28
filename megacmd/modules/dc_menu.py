@@ -272,11 +272,31 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
         print("📋 Logs: tail -f /tmp/web_server.log")
         print("🖥️  Consola: screen -r minecraft_msx")
         
-        # Intentar hacer el puerto público automáticamente
+        # Intentar hacer el puerto público automáticamente con loop de verificación
         print("\n🌐 Configurando puerto 8080 como público...")
         print("   Esperando que el servidor esté listo...")
-        time.sleep(3)
+
+        # Esperar hasta que el puerto esté escuchando (máximo 10 segundos)
+        import socket
+        port_ready = False
+        for i in range(10):
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                result = sock.connect_ex(('localhost', 8080))
+                sock.close()
+                if result == 0:
+                    print(verde(f"   ✓ Puerto 8080 escuchando (después de {i+1}s)"))
+                    port_ready = True
+                    break
+            except:
+                pass
+            time.sleep(1)
         
+        if not port_ready:
+            print(amarillo("   ⚠ Puerto 8080 no responde aún, intentando de todas formas..."))
+
+        time.sleep(2)  # Espera adicional por seguridad
+
         try:
             codespace_name = os.getenv('CODESPACE_NAME')
             
@@ -291,12 +311,13 @@ echo "✅ Servidor web iniciado (puerto $PORT)"
                 if result.returncode == 0:
                     print(verde("✓ Puerto 8080 configurado como público automáticamente"))
                 else:
-                    raise Exception(f"gh CLI retornó código {result.returncode}")
+                    error_msg = result.stderr.strip() if result.stderr else result.stdout.strip()
+                    raise Exception(f"gh CLI retornó código {result.returncode}: {error_msg}")
             else:
                 raise Exception("CODESPACE_NAME no está definido")
 
         except Exception as e:
-            print(amarillo(f"⚠ No se pudo configurar automáticamente"))
+            print(amarillo(f"⚠ No se pudo configurar automáticamente: {str(e)}"))
             print("  Configura manualmente el puerto 8080 como PÚBLICO en:")
             print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
             print("\n  O ejecuta manualmente:")
