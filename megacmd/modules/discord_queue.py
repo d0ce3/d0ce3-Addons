@@ -1,8 +1,3 @@
-"""
-discord_queue.py con proxy a Python del sistema para SQLite3
-Permite usar SQLite3 desde un ejecutable empaquetado sin incluirlo
-Logs en archivo y sistema de logging del addon (sin prints visibles al usuario)
-"""
 import json
 import os
 import subprocess
@@ -22,6 +17,7 @@ try:
 except:
     pass
 
+addon_logger = None
 try:
     addon_logger = CloudModuleLoader.load_module("logger")
 except:
@@ -30,10 +26,20 @@ except:
 def _log(level, message):
     _logger.log(getattr(logging, level, logging.INFO), message)
     if addon_logger:
-        addon_logger.log(level, f"discord_queue: {message}")
+        try:
+            msg = f"discord_queue: {message}"
+            if level == "DEBUG":
+                addon_logger.debug(msg)
+            elif level == "INFO":
+                addon_logger.info(msg)
+            elif level == "WARNING":
+                addon_logger.warning(msg)
+            elif level == "ERROR":
+                addon_logger.error(msg)
+        except:
+            pass
 
 IS_PACKAGED = getattr(sys, 'frozen', False) or '.msx' in sys.executable
-
 SYSTEM_PYTHON = '/usr/bin/python3'
 
 try:
@@ -47,10 +53,10 @@ if CAN_USE_SQLITE_DIRECT:
     _log("DEBUG", "Backend: SQLite3 directo")
 elif IS_PACKAGED and os.path.exists(SYSTEM_PYTHON):
     USE_MODE = 'proxy'
-    _log("INFO", "Backend: SQLite3 via proxy (Python del sistema)")
+    _log("INFO", "Backend: SQLite3 via proxy")
 else:
     USE_MODE = 'json'
-    _log("WARNING", "Backend: JSON fallback (SQLite no disponible)")
+    _log("WARNING", "Backend: JSON fallback")
 
 
 class SQLiteProxy:
@@ -59,11 +65,9 @@ class SQLiteProxy:
         self.helper_script = self._create_helper_script()
     
     def _create_helper_script(self) -> str:
-        """Crea script helper temporal para operaciones SQLite"""
         script_path = '/tmp/discord_queue_helper.py'
-        
         if os.path.exists(script_path):
-            _log("DEBUG", "Reusando script helper existente")
+            _log("DEBUG", "Reusando script helper")
             return script_path
         
         script_content = '''#!/usr/bin/env python3
@@ -245,11 +249,10 @@ if __name__ == "__main__":
         with open(script_path, 'w') as f:
             f.write(script_content)
         os.chmod(script_path, 0o755)
-        _log("INFO", "Script helper creado en /tmp/discord_queue_helper.py")
+        _log("INFO", "Script helper creado")
         return script_path
     
     def _call_helper(self, *args) -> dict:
-        """Ejecuta comando en Python del sistema"""
         try:
             result = subprocess.run(
                 [SYSTEM_PYTHON, self.helper_script] + list(args),
@@ -257,14 +260,12 @@ if __name__ == "__main__":
                 text=True,
                 timeout=30
             )
-            
             if result.returncode != 0:
-                _log("ERROR", f"Helper script error: {result.stderr}")
+                _log("ERROR", f"Helper error: {result.stderr}")
                 raise Exception(f"Helper error: {result.stderr}")
-            
             return json.loads(result.stdout)
         except subprocess.TimeoutExpired:
-            _log("ERROR", "Helper script timeout (>30s)")
+            _log("ERROR", "Helper timeout")
             return {"success": False, "error": "Timeout"}
         except Exception as e:
             _log("ERROR", f"Helper call failed: {e}")
@@ -322,7 +323,6 @@ if __name__ == "__main__":
 
 
 class DiscordQueueDirect:
-    
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._init_db()
@@ -374,7 +374,6 @@ class DiscordQueueDirect:
             ORDER BY created_at ASC
             LIMIT ?
         """, (max_attempts, limit))
-        
         events = []
         for row in cursor.fetchall():
             events.append({
@@ -387,7 +386,6 @@ class DiscordQueueDirect:
                 'last_attempt': row['last_attempt'],
                 'error_message': row['error_message']
             })
-        
         conn.close()
         return events
     
@@ -412,19 +410,14 @@ class DiscordQueueDirect:
     def get_stats(self) -> Dict:
         conn = self._get_connection()
         cursor = conn.cursor()
-        
         cursor.execute("SELECT COUNT(*) as total FROM events")
         total = cursor.fetchone()['total']
-        
         cursor.execute("SELECT COUNT(*) as pending FROM events WHERE processed = 0")
         pending = cursor.fetchone()['pending']
-        
         cursor.execute("SELECT COUNT(*) as processed FROM events WHERE processed = 1")
         processed = cursor.fetchone()['processed']
-        
         cursor.execute("SELECT COUNT(*) as failed FROM events WHERE processed = 0 AND attempts >= 3")
         failed = cursor.fetchone()['failed']
-        
         conn.close()
         return {'total': total, 'pending': pending, 'processed': processed, 'failed': failed}
     
@@ -446,7 +439,6 @@ class DiscordQueueDirect:
             WHERE processed = 0 AND attempts >= 3
             ORDER BY created_at DESC
         """)
-        
         events = []
         for row in cursor.fetchall():
             events.append({
@@ -458,7 +450,6 @@ class DiscordQueueDirect:
                 'attempts': row['attempts'],
                 'error_message': row['error_message']
             })
-        
         conn.close()
         return events
     
@@ -478,7 +469,6 @@ class DiscordQueueDirect:
 
 
 class DiscordQueueJSON:
-    
     def __init__(self, db_path: str):
         self.db_path = db_path.replace('.db', '.json')
         self._lock = threading.Lock()
@@ -612,13 +602,13 @@ class DiscordQueue:
             self.backend = "SQLite3 (directo)"
         elif USE_MODE == 'proxy':
             self._impl = SQLiteProxy(db_path)
-            self.backend = "SQLite3 (proxy via sistema)"
+            self.backend = "SQLite3 (proxy)"
         else:
             self._impl = DiscordQueueJSON(db_path)
             self.backend = "JSON (fallback)"
         
         self._initialized = True
-        _log("INFO", f"Inicializado con backend: {self.backend}")
+        _log("INFO", f"Backend: {self.backend}")
     
     def add_event(self, user_id: str, event_type: str, payload: dict) -> int:
         return self._impl.add_event(user_id, event_type, payload)
