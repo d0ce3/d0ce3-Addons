@@ -9,7 +9,7 @@ import logging
 
 _logger = logging.getLogger('discord_queue')
 _logger.setLevel(logging.INFO)
-log_file = os.path.join(os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace"), ".discord_queue.log")
+log_file = os.path.expanduser('~/.d0ce3_addons/.discord_queue.log')
 try:
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
@@ -597,8 +597,7 @@ class DiscordQueue:
             return
         
         if db_path is None:
-            workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
-            db_path = os.path.join(workspace, ".discord_events.db")
+            db_path = os.path.expanduser('~/.d0ce3_addons/.discord_events.db')
         
         if USE_MODE == 'direct':
             self._impl = DiscordQueueDirect(db_path)
