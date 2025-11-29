@@ -3,6 +3,9 @@ import sys
 import logging
 from datetime import datetime
 
+ADDONS_DIR = os.path.expanduser('~/.d0ce3_addons')
+os.makedirs(ADDONS_DIR, exist_ok=True)
+
 class LoggerManager:
     _instance = None
     _logger = None
@@ -41,9 +44,9 @@ class LoggerManager:
                     os.makedirs(log_dir, exist_ok=True)
                 self._log_file = os.path.join(log_dir, 'megacmd_full.log')
             else:
-                self._log_file = '/var/tmp/.megacmd.log'
+                self._log_file = os.path.join(ADDONS_DIR, '.megacmd.log')
         except:
-            self._log_file = 'megacmd_full.log'
+            self._log_file = os.path.join(ADDONS_DIR, '.megacmd.log')
         
         try:
             file_handler = logging.FileHandler(self._log_file, encoding='utf-8')
@@ -312,3 +315,4 @@ def log_error_listando_backups(error):
 
 def log_error_limpiar_backups(error):
     logger_manager.error(f"Error en limpiar_backups_antiguos: {error}")
+    

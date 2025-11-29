@@ -10,7 +10,9 @@ utils = CloudModuleLoader.load_module("utils")
 backup_timer = None
 backup_timer_created_at = None
 
-TIMER_LOCK_FILE = os.path.expanduser("~/.megacmd_timer_lock")
+ADDONS_DIR = os.path.expanduser('~/.d0ce3_addons')
+os.makedirs(ADDONS_DIR, exist_ok=True)
+TIMER_LOCK_FILE = os.path.join(ADDONS_DIR, '.megacmd_timer_lock')
 
 class TimerManager:
     @staticmethod
@@ -86,7 +88,7 @@ class TimerManager:
 def _actualizar_configuracion_msx(activar=True):
     workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
     config_path = os.path.join(workspace, "configuracion.json")
-    backup_mode_cache = os.path.expanduser('~/.d0ce3_addons/.backup_mode_original')
+    backup_mode_cache = os.path.join(ADDONS_DIR, '.backup_mode_original')
     
     try:
         if not os.path.exists(config_path):
