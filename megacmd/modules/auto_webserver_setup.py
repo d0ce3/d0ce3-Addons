@@ -35,13 +35,12 @@ def auto_configurar_web_server():
         
         if todo_instalado and servidor_corriendo:
             print("✓ Servidor web ya está configurado y corriendo")
-            print(f"📂 Ubicación: {work_dir}")
             print("💡 Puerto: 8080")
-            print("📋 Logs: tail -f /tmp/web_server.log")
-            print("🖥️  Consola: screen -r minecraft_msx\n")
+            print("📋 Ver logs: tail -f /tmp/web_server.log")
+            print("🖥️  Acceder consola Minecraft: screen -r minecraft_msx\n")
             
             # Solo verificar/configurar puerto público
-            print("🌐 Verificando puerto 8080...")
+            print("🌐 Configurando puerto 8080 como público...")
             codespace_name = os.getenv('CODESPACE_NAME')
             if codespace_name:
                 result = subprocess.run(
@@ -51,20 +50,36 @@ def auto_configurar_web_server():
                     timeout=15
                 )
                 if result.returncode == 0:
-                    print("✓ Puerto 8080 configurado como público")
-                    utils.logger.info("Puerto 8080 configurado como público")
+                    # Verificar que realmente se configuró
+                    verify = subprocess.run(
+                        ['gh', 'codespace', 'ports', '-c', codespace_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if '8080' in verify.stdout and 'public' in verify.stdout.lower():
+                        print("✓ Puerto 8080 está público")
+                        utils.logger.info("Puerto 8080 configurado como público")
+                    else:
+                        print("⚠ Puerto 8080 configurado, pero verifica manualmente")
+                        print("  VS Code → Panel PORTS → Asegúrate que 8080 sea Public")
+                        utils.logger.warning("Puerto configurado pero no verificado como público")
                 else:
-                    print("⚠ Configura manualmente el puerto 8080 como PÚBLICO")
-                    print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
-                    utils.logger.warning("No se pudo configurar puerto automáticamente")
+                    print("⚠ No se pudo configurar automáticamente")
+                    print("  Configura manualmente:")
+                    print("  1. Abre VS Code")
+                    print("  2. Panel PORTS (abajo)")
+                    print("  3. Click derecho en puerto 8080 → Port Visibility → Public")
+                    utils.logger.warning(f"Error gh: {result.stderr[:100] if result.stderr else 'unknown'}")
             else:
-                print("⚠ CODESPACE_NAME no definido, configura el puerto manualmente")
+                print("⚠ No se puede configurar automáticamente (CODESPACE_NAME no definido)")
+                print("  Configura manualmente en VS Code → Panel PORTS")
                 utils.logger.warning("CODESPACE_NAME no definido")
             
             return True
         
         # Si no está todo instalado, hacer instalación completa
-        print(f"📂 Instalando en: {work_dir}\n")
+        print("📦 Instalando servidor web de control...\n")
         os.makedirs(work_dir, exist_ok=True)
         print("📦 Verificando screen...")
         screen_check = subprocess.run(['which', 'screen'], capture_output=True)
@@ -283,10 +298,9 @@ echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
             print("   ⚠ Puerto 8080 no responde aún")
         
         print("\n✓ Servidor web configurado")
-        print(f"📂 Archivos en: {work_dir}")
         print("💡 Puerto: 8080")
-        print("📋 Logs: tail -f /tmp/web_server.log")
-        print("🖥️  Consola: screen -r minecraft_msx")
+        print("📋 Ver logs: tail -f /tmp/web_server.log")
+        print("🖥️  Acceder consola Minecraft: screen -r minecraft_msx")
 
         # Configurar puerto como público
         print("\n🌐 Configurando puerto 8080 como público...")
@@ -301,22 +315,34 @@ echo "🔑 Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
                     timeout=15
                 )
                 if result.returncode == 0:
-                    print("✓ Puerto 8080 configurado como público")
-                    utils.logger.info("Puerto 8080 configurado como público")
+                    # Verificar que realmente se configuró
+                    verify = subprocess.run(
+                        ['gh', 'codespace', 'ports', '-c', codespace_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if '8080' in verify.stdout and 'public' in verify.stdout.lower():
+                        print("✓ Puerto 8080 está público")
+                        utils.logger.info("Puerto 8080 configurado como público")
+                    else:
+                        print("⚠ Verifica manualmente que el puerto 8080 sea público")
+                        print("  VS Code → Panel PORTS → Click derecho en 8080 → Port Visibility → Public")
+                        utils.logger.warning("Puerto configurado pero no verificado")
                 else:
                     print("⚠ No se pudo configurar automáticamente")
                     print("  Configura manualmente:")
-                    print("  1. VS Code → Panel PORTS")
-                    print("  2. Click derecho en puerto 8080")
-                    print("  3. Port Visibility → Public")
-                    utils.logger.warning(f"Error gh: {result.stderr}")
+                    print("  1. Abre VS Code")
+                    print("  2. Panel PORTS (abajo)")
+                    print("  3. Click derecho en puerto 8080 → Port Visibility → Public")
+                    utils.logger.warning(f"Error gh: {result.stderr[:100] if result.stderr else 'unknown'}")
             else:
-                print("⚠ CODESPACE_NAME no está definido")
-                print("  Configura el puerto manualmente en VS Code → Panel PORTS")
+                print("⚠ No se puede configurar automáticamente")
+                print("  Configura manualmente en VS Code → Panel PORTS")
                 utils.logger.warning("CODESPACE_NAME no definido")
         except Exception as e:
             print(f"⚠ Error: {str(e)}")
-            print("  Configura manualmente: gh codespace ports visibility 8080:public -c $CODESPACE_NAME")
+            print("  Configura manualmente el puerto en VS Code → Panel PORTS")
             utils.logger.error(f"Error configurando puerto: {e}")
             
     except Exception as e:
