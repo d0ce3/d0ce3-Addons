@@ -86,7 +86,7 @@ class TimerManager:
 def _actualizar_configuracion_msx(activar=True):
     workspace = os.getenv("CODESPACE_VSCODE_FOLDER", "/workspace")
     config_path = os.path.join(workspace, "configuracion.json")
-    backup_mode_cache = os.path.join(config.BASE_DIR, ".backup_mode_original")
+    backup_mode_cache = os.path.expanduser('~/.d0ce3_addons/.backup_mode_original')
     
     try:
         if not os.path.exists(config_path):
