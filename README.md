@@ -19,7 +19,7 @@ MSX es un entorno pre-configurado para Minecraft en GitHub Codespaces que incluy
 
 ### Requisitos del Sistema
 - **Entorno**: GitHub Codespace con MSX
-- **MEGAcmd**: Instalado y configurado
+- **MEGAcmd**: Instalacion y configuracion automatica
 - **Python**: 3.9 o superior
 - **Cuenta MEGA**: Para backups en la nube
 - **Bot Discord**: [Doce-Bt](https://github.com/d0ce3/Doce-Bt) desplegado
@@ -66,15 +66,6 @@ MSX es un entorno pre-configurado para Minecraft en GitHub Codespaces que incluy
 
 ---
 
-## 📖 Uso
-
-### Menú Principal
-
-```bash
-mega-cmd
-menu
-```
-
 **Opciones disponibles:**
 
 ```
@@ -97,8 +88,8 @@ menu → 1 → 1  # Crear backup completo
 
 #### Configurar Backups Automáticos
 ```bash
-menu → 3 → 1  # Activar/configurar
-# Elige intervalo: 1, 2, 3, 6, 12, 24 horas
+menu msx → 4 → addon → 5 →1 # Activar/configurar
+# Elige intervalo: ej: 1, 2, 3, 10, 20, 60 minutos
 ```
 
 #### Ver Estado de Backups
@@ -122,10 +113,7 @@ El asistente te pedirá:
 
 2. **Webhook URL** (detección automática)
    - El sistema detecta automáticamente la URL del bot
-   - Si no, ingresa manualmente:
-     - Render: `https://nombre-app.onrender.com/webhook/megacmd`
-     - Railway: `https://nombre-app.up.railway.app/webhook/megacmd`
-
+     
 #### Información del Bot
 
 ```bash
