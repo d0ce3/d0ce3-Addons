@@ -6,7 +6,7 @@ import glob
 import json
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
-CURRENT_WEBSERVER_VERSION = "1.0.0"
+CURRENT_WEBSERVER_VERSION = "1.0.1"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -57,6 +57,41 @@ def necesita_actualizacion(webserver_config):
     installed_version = webserver_config.get("version", "0.0.0")
     return installed_version != CURRENT_WEBSERVER_VERSION
 
+def limpiar_bashrc_duplicados():
+    bashrc_path = os.path.expanduser("~/.bashrc")
+    if not os.path.exists(bashrc_path):
+        return
+    
+    try:
+        with open(bashrc_path, 'r') as f:
+            lines = f.readlines()
+        
+        new_lines = []
+        skip_next = False
+        found_webserver = False
+        
+        for i, line in enumerate(lines):
+            if 'd0ce3-Addons auto-start' in line:
+                if not found_webserver:
+                    new_lines.append(line)
+                    found_webserver = True
+                skip_next = True
+                continue
+            
+            if skip_next and 'start_web_server.sh' in line:
+                if not found_webserver or (found_webserver and 'disown' in line):
+                    new_lines.append(line)
+                    found_webserver = False
+                skip_next = False
+                continue
+            
+            new_lines.append(line)
+        
+        with open(bashrc_path, 'w') as f:
+            f.writelines(new_lines)
+    except:
+        pass
+
 def auto_configurar_web_server():
     utils = CloudModuleLoader.load_module("utils")
     config = CloudModuleLoader.load_module("config")
@@ -67,7 +102,7 @@ def auto_configurar_web_server():
     sh_path = os.path.join(work_dir, "start_web_server.sh")
     webserver_path = os.path.join(work_dir, "web_server.py")
     bashrc_path = os.path.expanduser("~/.bashrc")
-    bashrc_line = f"[ -f '{sh_path}' ] && bash {sh_path} > /dev/null 2>&1 < /dev/null & disown"
+    bashrc_line = f"[ -f '{sh_path}' ] && (bash {sh_path} > /dev/null 2>&1 &); disown 2>/dev/null"
 
     print("\n" + "─" * 50)
     print("CONFIGURANDO SERVIDOR WEB DE CONTROL")
@@ -76,6 +111,8 @@ def auto_configurar_web_server():
     try:
         if not ensure_tmux_installed():
             return False
+        
+        limpiar_bashrc_duplicados()
         
         todo_instalado = (
             os.path.exists(webserver_path) and
@@ -283,11 +320,17 @@ if tmux has-session -t $SESSION_NAME 2>/dev/null; then
 fi
 
 if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
-    if grep -q "export WEB_SERVER_AUTH_TOKEN=" ~/.bashrc 2>/dev/null; then
-        source ~/.bashrc
+    BASHRC="$HOME/.bashrc"
+    
+    if grep -q "^export WEB_SERVER_AUTH_TOKEN=" "$BASHRC" 2>/dev/null; then
+        source "$BASHRC"
     else
         NEW_TOKEN=$(openssl rand -hex 32)
-        echo "export WEB_SERVER_AUTH_TOKEN=\\"$NEW_TOKEN\\"" >> ~/.bashrc
+        
+        grep -v "^export WEB_SERVER_AUTH_TOKEN=" "$BASHRC" > "$BASHRC.tmp" 2>/dev/null || touch "$BASHRC.tmp"
+        echo "export WEB_SERVER_AUTH_TOKEN=\\"$NEW_TOKEN\\"" >> "$BASHRC.tmp"
+        mv "$BASHRC.tmp" "$BASHRC"
+        
         export WEB_SERVER_AUTH_TOKEN="$NEW_TOKEN"
     fi
 fi
@@ -316,7 +359,8 @@ fi
         if os.path.exists(bashrc_path):
             with open(bashrc_path, "r") as f:
                 bashrc_content = f.read()
-            if bashrc_line not in bashrc_content:
+            
+            if bashrc_line not in bashrc_content and "start_web_server.sh" not in bashrc_content:
                 with open(bashrc_path, "a") as f:
                     f.write(f"\n# d0ce3-Addons auto-start\n{bashrc_line}\n")
 
