@@ -7,7 +7,7 @@ import json
 import requests
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
-CURRENT_WEBSERVER_VERSION = "1.0.1"
+CURRENT_WEBSERVER_VERSION = "1.0.0"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -93,58 +93,6 @@ def limpiar_bashrc_duplicados():
     except:
         pass
 
-def configurar_puerto_publico_api(port):
-    codespace_name = os.getenv('CODESPACE_NAME')
-    github_token = os.getenv('GITHUB_TOKEN')
-    
-    if not codespace_name or not github_token:
-        return False
-    
-    try:
-        result = subprocess.run(
-            ['gh', 'api', 'user'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        if result.returncode != 0:
-            return False
-        
-        user_data = json.loads(result.stdout)
-        username = user_data.get('login')
-        
-        if not username:
-            return False
-        
-        api_url = f"https://api.github.com/user/codespaces/{codespace_name}/ports/{port}"
-        
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {github_token}",
-            "X-GitHub-Api-Version": "2022-11-28"
-        }
-        
-        payload = {"visibility": "public"}
-        
-        for attempt in range(5):
-            try:
-                response = requests.patch(api_url, headers=headers, json=payload, timeout=10)
-                
-                if response.status_code in [200, 204]:
-                    return True
-                elif response.status_code == 404:
-                    time.sleep(3)
-                    continue
-                else:
-                    time.sleep(2)
-            except:
-                time.sleep(2)
-        
-        return False
-    except:
-        return False
-
 def auto_configurar_web_server():
     utils = CloudModuleLoader.load_module("utils")
     config = CloudModuleLoader.load_module("config")
@@ -154,6 +102,7 @@ def auto_configurar_web_server():
     work_dir = os.path.expanduser("~/.d0ce3_addons")
     sh_path = os.path.join(work_dir, "start_web_server.sh")
     webserver_path = os.path.join(work_dir, "web_server.py")
+    port_watcher_path = os.path.join(work_dir, "port_watcher.py")
     bashrc_path = os.path.expanduser("~/.bashrc")
     bashrc_line = f"[ -f '{sh_path}' ] && (bash {sh_path} > /dev/null 2>&1 &); disown 2>/dev/null"
 
@@ -169,7 +118,8 @@ def auto_configurar_web_server():
         
         todo_instalado = (
             os.path.exists(webserver_path) and
-            os.path.exists(sh_path)
+            os.path.exists(sh_path) and
+            os.path.exists(port_watcher_path)
         )
         
         session_name = webserver_config.get("session_name", "msx")
@@ -187,18 +137,6 @@ def auto_configurar_web_server():
                 print(f"💡 Puerto: {port}")
                 print(f"📋 Ver logs: tmux attach -t {session_name}")
                 print()
-                
-                if webserver_config.get("auto_public", True):
-                    print(f"🌐 Configurando puerto {port} como público...")
-                    if configurar_puerto_publico_api(port):
-                        print(f"✓ Puerto {port} está público")
-                        if utils:
-                            utils.logger.info(f"Puerto {port} configurado como público")
-                    else:
-                        print(f"⚠ No se pudo configurar automáticamente")
-                        if utils:
-                            utils.logger.warning("Puerto no se pudo configurar como público")
-                
                 return True
         
         if necesita_actualizacion(webserver_config):
@@ -211,6 +149,93 @@ def auto_configurar_web_server():
             print("📦 Instalando servidor web de control...\n")
         
         os.makedirs(work_dir, exist_ok=True)
+
+        with open(port_watcher_path, "w") as f:
+            f.write(f'''#!/usr/bin/env python3
+import subprocess
+import os
+import time
+import json
+
+PORT = {port}
+CODESPACE_NAME = os.getenv('CODESPACE_NAME')
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+MAX_ATTEMPTS = 60
+CHECK_INTERVAL = 5
+
+def get_port_visibility():
+    try:
+        result = subprocess.run(
+            ['gh', 'codespace', 'ports', '-c', CODESPACE_NAME],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode != 0:
+            return None
+        
+        for line in result.stdout.split('\\n'):
+            if str(PORT) in line:
+                if 'public' in line.lower():
+                    return 'public'
+                elif 'private' in line.lower():
+                    return 'private'
+        return None
+    except:
+        return None
+
+def set_port_public_api():
+    if not CODESPACE_NAME or not GITHUB_TOKEN:
+        return False
+    
+    try:
+        result = subprocess.run(
+            ['gh', 'api', 'user', '--jq', '.login'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode != 0:
+            return False
+        
+        api_url = f"https://api.github.com/user/codespaces/{{CODESPACE_NAME}}/ports/{{PORT}}"
+        
+        cmd = [
+            'curl', '-s', '-X', 'PATCH',
+            '-H', 'Accept: application/vnd.github+json',
+            '-H', f'Authorization: Bearer {{GITHUB_TOKEN}}',
+            '-H', 'X-GitHub-Api-Version: 2022-11-28',
+            '-d', '{{"visibility":"public"}}',
+            api_url
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0 and 'public' in result.stdout:
+            return True
+        
+        return False
+    except:
+        return False
+
+def main():
+    for attempt in range(MAX_ATTEMPTS):
+        visibility = get_port_visibility()
+        
+        if visibility == 'public':
+            break
+        elif visibility == 'private':
+            if set_port_public_api():
+                break
+        
+        time.sleep(CHECK_INTERVAL)
+
+if __name__ == '__main__':
+    main()
+''')
+        os.chmod(port_watcher_path, 0o755)
 
         with open(webserver_path, "w") as f:
             f.write(f'''#!/usr/bin/env python3
@@ -346,38 +371,7 @@ cd "$WORK_DIR"
 SESSION_NAME="{session_name}"
 PORT={port}
 
-configure_public_port() {{
-    if [ -z "$CODESPACE_NAME" ] || [ -z "$GITHUB_TOKEN" ]; then
-        return 1
-    fi
-    
-    USER=$(gh api user --jq '.login' 2>/dev/null)
-    if [ -z "$USER" ]; then
-        return 1
-    fi
-    
-    API_URL="https://api.github.com/user/codespaces/$CODESPACE_NAME/ports/$PORT"
-    
-    for i in {{1..5}}; do
-        RESPONSE=$(curl -s -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -d '{{"visibility":"public"}}' \
-            "$API_URL" 2>/dev/null)
-        
-        if echo "$RESPONSE" | grep -q '"visibility".*"public"'; then
-            return 0
-        fi
-        
-        sleep 3
-    done
-    
-    return 1
-}}
-
 if tmux has-session -t $SESSION_NAME 2>/dev/null; then
-    configure_public_port
     exit 0
 fi
 
@@ -407,9 +401,7 @@ fi
 
 tmux new-session -d -s $SESSION_NAME "python3 $WORK_DIR/web_server.py"
 
-sleep 5
-
-configure_public_port &
+nohup python3 "$WORK_DIR/port_watcher.py" > /dev/null 2>&1 &
 ''')
         os.chmod(sh_path, 0o755)
 
@@ -450,14 +442,7 @@ configure_public_port &
         print(f"\n✓ Servidor web configurado")
         print(f"💡 Puerto: {port}")
         print(f"📋 Ver logs: tmux attach -t {session_name}")
-
-        if webserver_config.get("auto_public", True):
-            print(f"\n🌐 Configurando puerto {port} como público...")
-            time.sleep(3)
-            if configurar_puerto_publico_api(port):
-                print(f"✓ Puerto {port} está público")
-            else:
-                print(f"⚠ Verifica manualmente el puerto {port}")
+        print(f"🔍 Port watcher ejecutándose en background")
             
     except Exception as e:
         print(f"\n✗ Error: {e}")
