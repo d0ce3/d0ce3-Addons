@@ -6,7 +6,7 @@ import glob
 import json
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
-CURRENT_WEBSERVER_VERSION = "1.0.1"
+CURRENT_WEBSERVER_VERSION = "1.0.0"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -67,7 +67,7 @@ def auto_configurar_web_server():
     sh_path = os.path.join(work_dir, "start_web_server.sh")
     webserver_path = os.path.join(work_dir, "web_server.py")
     bashrc_path = os.path.expanduser("~/.bashrc")
-    bashrc_line = f"[ -f '{sh_path}' ] && bash {sh_path} > /dev/null 2>&1 &"
+    bashrc_line = f"[ -f '{sh_path}' ] && bash {sh_path} > /dev/null 2>&1 < /dev/null & disown"
 
     print("\n" + "─" * 50)
     print("CONFIGURANDO SERVIDOR WEB DE CONTROL")

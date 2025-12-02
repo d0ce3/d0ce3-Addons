@@ -10,12 +10,13 @@ rm -rf /tmp/megacmd_package
 mkdir -p /tmp/megacmd_package/modules
 mkdir -p /tmp/megacmd_package/core
 
-# Copiar archivos
 echo "📋 Copiando archivos..."
 
 cp megacmd/d0ce3tools.addon /tmp/megacmd_package/
 cp megacmd/d0ce3_tools.py /tmp/megacmd_package/
-cp megacmd/modules/*.py /tmp/megacmd_package/modules/
+
+cp -r megacmd/modules/* /tmp/megacmd_package/modules/
+
 cp megacmd/core/*.py /tmp/megacmd_package/core/
 
 echo "🗜️ Comprimiendo..."
