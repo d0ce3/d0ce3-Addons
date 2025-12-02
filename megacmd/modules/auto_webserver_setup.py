@@ -4,9 +4,10 @@ import time
 import socket
 import glob
 import json
+import requests
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
-CURRENT_WEBSERVER_VERSION = "1.0.0"
+CURRENT_WEBSERVER_VERSION = "1.0.1"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -92,6 +93,58 @@ def limpiar_bashrc_duplicados():
     except:
         pass
 
+def configurar_puerto_publico_api(port):
+    codespace_name = os.getenv('CODESPACE_NAME')
+    github_token = os.getenv('GITHUB_TOKEN')
+    
+    if not codespace_name or not github_token:
+        return False
+    
+    try:
+        result = subprocess.run(
+            ['gh', 'api', 'user'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode != 0:
+            return False
+        
+        user_data = json.loads(result.stdout)
+        username = user_data.get('login')
+        
+        if not username:
+            return False
+        
+        api_url = f"https://api.github.com/user/codespaces/{codespace_name}/ports/{port}"
+        
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {github_token}",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }
+        
+        payload = {"visibility": "public"}
+        
+        for attempt in range(5):
+            try:
+                response = requests.patch(api_url, headers=headers, json=payload, timeout=10)
+                
+                if response.status_code in [200, 204]:
+                    return True
+                elif response.status_code == 404:
+                    time.sleep(3)
+                    continue
+                else:
+                    time.sleep(2)
+            except:
+                time.sleep(2)
+        
+        return False
+    except:
+        return False
+
 def auto_configurar_web_server():
     utils = CloudModuleLoader.load_module("utils")
     config = CloudModuleLoader.load_module("config")
@@ -137,33 +190,14 @@ def auto_configurar_web_server():
                 
                 if webserver_config.get("auto_public", True):
                     print(f"🌐 Configurando puerto {port} como público...")
-                    codespace_name = os.getenv('CODESPACE_NAME')
-                    if codespace_name:
-                        result = subprocess.run(
-                            ['gh', 'codespace', 'ports', 'visibility', f'{port}:public', '-c', codespace_name],
-                            capture_output=True,
-                            text=True,
-                            timeout=15
-                        )
-                        if result.returncode == 0:
-                            verify = subprocess.run(
-                                ['gh', 'codespace', 'ports', '-c', codespace_name],
-                                capture_output=True,
-                                text=True,
-                                timeout=10
-                            )
-                            if str(port) in verify.stdout and 'public' in verify.stdout.lower():
-                                print(f"✓ Puerto {port} está público")
-                                if utils:
-                                    utils.logger.info(f"Puerto {port} configurado como público")
-                            else:
-                                print(f"⚠ Puerto {port} configurado, pero verifica manualmente")
-                                if utils:
-                                    utils.logger.warning("Puerto configurado pero no verificado como público")
-                        else:
-                            print("⚠ No se pudo configurar automáticamente")
+                    if configurar_puerto_publico_api(port):
+                        print(f"✓ Puerto {port} está público")
+                        if utils:
+                            utils.logger.info(f"Puerto {port} configurado como público")
                     else:
-                        print("⚠ No se puede configurar automáticamente (CODESPACE_NAME no definido)")
+                        print(f"⚠ No se pudo configurar automáticamente")
+                        if utils:
+                            utils.logger.warning("Puerto no se pudo configurar como público")
                 
                 return True
         
@@ -313,15 +347,33 @@ SESSION_NAME="{session_name}"
 PORT={port}
 
 configure_public_port() {{
-    if [ -n "$CODESPACE_NAME" ]; then
-        for i in {{1..3}}; do
-            gh codespace ports visibility $PORT:public -c "$CODESPACE_NAME" >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                return 0
-            fi
-            sleep 2
-        done
+    if [ -z "$CODESPACE_NAME" ] || [ -z "$GITHUB_TOKEN" ]; then
+        return 1
     fi
+    
+    USER=$(gh api user --jq '.login' 2>/dev/null)
+    if [ -z "$USER" ]; then
+        return 1
+    fi
+    
+    API_URL="https://api.github.com/user/codespaces/$CODESPACE_NAME/ports/$PORT"
+    
+    for i in {{1..5}}; do
+        RESPONSE=$(curl -s -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -d '{{"visibility":"public"}}' \
+            "$API_URL" 2>/dev/null)
+        
+        if echo "$RESPONSE" | grep -q '"visibility".*"public"'; then
+            return 0
+        fi
+        
+        sleep 3
+    done
+    
+    return 1
 }}
 
 if tmux has-session -t $SESSION_NAME 2>/dev/null; then
@@ -355,9 +407,9 @@ fi
 
 tmux new-session -d -s $SESSION_NAME "python3 $WORK_DIR/web_server.py"
 
-sleep 3
+sleep 5
 
-configure_public_port
+configure_public_port &
 ''')
         os.chmod(sh_path, 0o755)
 
@@ -401,33 +453,11 @@ configure_public_port
 
         if webserver_config.get("auto_public", True):
             print(f"\n🌐 Configurando puerto {port} como público...")
-            time.sleep(2)
-            try:
-                codespace_name = os.getenv('CODESPACE_NAME')
-                if codespace_name:
-                    result = subprocess.run(
-                        ['gh', 'codespace', 'ports', 'visibility', f'{port}:public', '-c', codespace_name],
-                        capture_output=True,
-                        text=True,
-                        timeout=15
-                    )
-                    if result.returncode == 0:
-                        verify = subprocess.run(
-                            ['gh', 'codespace', 'ports', '-c', codespace_name],
-                            capture_output=True,
-                            text=True,
-                            timeout=10
-                        )
-                        if str(port) in verify.stdout and 'public' in verify.stdout.lower():
-                            print(f"✓ Puerto {port} está público")
-                        else:
-                            print(f"⚠ Verifica manualmente el puerto {port}")
-                    else:
-                        print("⚠ No se pudo configurar automáticamente")
-                else:
-                    print("⚠ No se puede configurar automáticamente")
-            except Exception as e:
-                print(f"⚠ Error: {str(e)}")
+            time.sleep(3)
+            if configurar_puerto_publico_api(port):
+                print(f"✓ Puerto {port} está público")
+            else:
+                print(f"⚠ Verifica manualmente el puerto {port}")
             
     except Exception as e:
         print(f"\n✗ Error: {e}")
