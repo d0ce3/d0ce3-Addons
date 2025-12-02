@@ -9,7 +9,7 @@ import re
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
 TUNNEL_URL_FILE = os.path.expanduser("~/.d0ce3_addons/tunnel_url.txt")
-CURRENT_WEBSERVER_VERSION = "1.5.0"
+CURRENT_WEBSERVER_VERSION = "1.0.2"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
