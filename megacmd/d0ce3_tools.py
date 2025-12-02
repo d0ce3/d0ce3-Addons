@@ -334,6 +334,7 @@ def init():
     if logger_mod and config.CONFIG.get("debug_enabled", False):
         logger_mod.logger_manager.enable_debug()
 
+    utils = ModuleLoader.load_module("utils")
     try:
         logger_observer = ModuleLoader.load_module("logger_observer")
         discord_observer = ModuleLoader.load_module("discord_observer")
