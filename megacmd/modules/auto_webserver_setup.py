@@ -3,73 +3,146 @@ import subprocess
 import time
 import socket
 import glob
+import json
+
+WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
+CURRENT_WEBSERVER_VERSION = "1.0.1"
+
+DEFAULT_WEBSERVER_CONFIG = {
+    "port": 8080,
+    "session_name": "msx",
+    "auto_public": True,
+    "version": CURRENT_WEBSERVER_VERSION
+}
+
+def cargar_webserver_config():
+    if os.path.exists(WEBSERVER_CONFIG_FILE):
+        try:
+            with open(WEBSERVER_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                for key, value in DEFAULT_WEBSERVER_CONFIG.items():
+                    if key not in config:
+                        config[key] = value
+                return config
+        except:
+            return DEFAULT_WEBSERVER_CONFIG.copy()
+    else:
+        guardar_webserver_config(DEFAULT_WEBSERVER_CONFIG)
+        return DEFAULT_WEBSERVER_CONFIG.copy()
+
+def guardar_webserver_config(config):
+    try:
+        os.makedirs(os.path.dirname(WEBSERVER_CONFIG_FILE), exist_ok=True)
+        with open(WEBSERVER_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        return True
+    except:
+        return False
+
+def ensure_tmux_installed():
+    check = subprocess.run(['which', 'tmux'], capture_output=True)
+    if check.returncode != 0:
+        print("📦 Instalando tmux...")
+        try:
+            subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['sudo', 'apt-get', 'install', '-y', '-qq', 'tmux'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("✓ tmux instalado")
+            return True
+        except:
+            print("✗ No se pudo instalar tmux")
+            return False
+    return True
+
+def necesita_actualizacion(webserver_config):
+    installed_version = webserver_config.get("version", "0.0.0")
+    return installed_version != CURRENT_WEBSERVER_VERSION
 
 def auto_configurar_web_server():
     utils = CloudModuleLoader.load_module("utils")
     config = CloudModuleLoader.load_module("config")
     
+    webserver_config = cargar_webserver_config()
+    
     work_dir = os.path.expanduser("~/.d0ce3_addons")
     sh_path = os.path.join(work_dir, "start_web_server.sh")
     webserver_path = os.path.join(work_dir, "web_server.py")
     bashrc_path = os.path.expanduser("~/.bashrc")
-    bashrc_line = f"[ -f '{sh_path}' ] && nohup bash {sh_path} > /tmp/web_server.log 2>&1 &"
+    bashrc_line = f"[ -f '{sh_path}' ] && bash {sh_path} > /dev/null 2>&1 &"
 
     print("\n" + "─" * 50)
     print("CONFIGURANDO SERVIDOR WEB DE CONTROL")
     print("─" * 50 + "\n")
 
     try:
+        if not ensure_tmux_installed():
+            return False
+        
         todo_instalado = (
             os.path.exists(webserver_path) and
             os.path.exists(sh_path)
         )
         
+        session_name = webserver_config.get("session_name", "msx")
+        port = webserver_config.get("port", 8080)
+        
         check_running = subprocess.run(
-            ['pgrep', '-f', 'python3.*web_server.py'],
+            ['tmux', 'has-session', '-t', session_name],
             capture_output=True
         )
         servidor_corriendo = check_running.returncode == 0
         
-        if todo_instalado and servidor_corriendo:
-            print("✓ Servidor web ya está configurado y corriendo")
-            print("💡 Puerto: 8080")
-            print("📋 Ver logs: tail -f /tmp/web_server.log")
-            print()
-            
-            print("🌐 Configurando puerto 8080 como público...")
-            codespace_name = os.getenv('CODESPACE_NAME')
-            if codespace_name:
-                result = subprocess.run(
-                    ['gh', 'codespace', 'ports', 'visibility', '8080:public', '-c', codespace_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=15
-                )
-                if result.returncode == 0:
-                    verify = subprocess.run(
-                        ['gh', 'codespace', 'ports', '-c', codespace_name],
-                        capture_output=True,
-                        text=True,
-                        timeout=10
-                    )
-                    if '8080' in verify.stdout and 'public' in verify.stdout.lower():
-                        print("✓ Puerto 8080 está público")
-                        utils.logger.info("Puerto 8080 configurado como público")
+        if todo_instalado and not necesita_actualizacion(webserver_config):
+            if servidor_corriendo:
+                print(f"✓ Servidor web ya está configurado y corriendo")
+                print(f"💡 Puerto: {port}")
+                print(f"📋 Ver logs: tmux attach -t {session_name}")
+                print()
+                
+                if webserver_config.get("auto_public", True):
+                    print(f"🌐 Configurando puerto {port} como público...")
+                    codespace_name = os.getenv('CODESPACE_NAME')
+                    if codespace_name:
+                        result = subprocess.run(
+                            ['gh', 'codespace', 'ports', 'visibility', f'{port}:public', '-c', codespace_name],
+                            capture_output=True,
+                            text=True,
+                            timeout=15
+                        )
+                        if result.returncode == 0:
+                            verify = subprocess.run(
+                                ['gh', 'codespace', 'ports', '-c', codespace_name],
+                                capture_output=True,
+                                text=True,
+                                timeout=10
+                            )
+                            if str(port) in verify.stdout and 'public' in verify.stdout.lower():
+                                print(f"✓ Puerto {port} está público")
+                                if utils:
+                                    utils.logger.info(f"Puerto {port} configurado como público")
+                            else:
+                                print(f"⚠ Puerto {port} configurado, pero verifica manualmente")
+                                if utils:
+                                    utils.logger.warning("Puerto configurado pero no verificado como público")
+                        else:
+                            print("⚠ No se pudo configurar automáticamente")
                     else:
-                        print("⚠ Puerto 8080 configurado, pero verifica manualmente")
-                        utils.logger.warning("Puerto configurado pero no verificado como público")
-                else:
-                    print("⚠ No se pudo configurar automáticamente")
-            else:
-                print("⚠ No se puede configurar automáticamente (CODESPACE_NAME no definido)")
-            
-            return True
+                        print("⚠ No se puede configurar automáticamente (CODESPACE_NAME no definido)")
+                
+                return True
         
-        print("📦 Instalando servidor web de control...\n")
+        if necesita_actualizacion(webserver_config):
+            print(f"🔄 Actualizando servidor web ({webserver_config.get('version', '0.0.0')} → {CURRENT_WEBSERVER_VERSION})...\n")
+            if servidor_corriendo:
+                print(f"🛑 Deteniendo sesión {session_name}...")
+                subprocess.run(['tmux', 'kill-session', '-t', session_name], capture_output=True)
+                time.sleep(1)
+        else:
+            print("📦 Instalando servidor web de control...\n")
+        
         os.makedirs(work_dir, exist_ok=True)
 
         with open(webserver_path, "w") as f:
-            f.write('''#!/usr/bin/env python3
+            f.write(f'''#!/usr/bin/env python3
 from flask import Flask, request, jsonify
 import subprocess
 import os
@@ -77,7 +150,7 @@ import glob
 import time
 
 app = Flask(__name__)
-PORT = int(os.getenv('PORT', 8080))
+PORT = int(os.getenv('PORT', {port}))
 AUTH_TOKEN = os.getenv('WEB_SERVER_AUTH_TOKEN', 'default_token')
 
 def find_msx_py():
@@ -88,38 +161,38 @@ def execute_minecraft_command(action):
     try:
         msx_path = find_msx_py()
         if not msx_path:
-            return {'error': 'msx.py no encontrado'}
+            return {{'error': 'msx.py no encontrado'}}
         
         repo_root = os.path.dirname(msx_path)
         
         if action == 'start':
             process = subprocess.Popen(
-                ['bash', '-c', f'cd {repo_root} && echo "1" | python3 msx.py'],
+                ['bash', '-c', f'cd {{repo_root}} && echo "1" | python3 msx.py'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=os.environ.copy()
             )
             time.sleep(1)
-            return {
+            return {{
                 'status': 'success',
                 'action': 'start',
                 'message': 'Servidor Minecraft iniciando...',
                 'pid': process.pid
-            }
+            }}
         
         elif action == 'stop':
             process = subprocess.Popen(
-                ['bash', '-c', f'cd {repo_root} && echo "2" | python3 msx.py'],
+                ['bash', '-c', f'cd {{repo_root}} && echo "2" | python3 msx.py'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=os.environ.copy()
             )
             time.sleep(1)
-            return {
+            return {{
                 'status': 'success',
                 'action': 'stop',
                 'message': 'Comando stop enviado al servidor'
-            }
+            }}
         
         elif action == 'status':
             java_check = subprocess.run(
@@ -129,24 +202,24 @@ def execute_minecraft_command(action):
             )
             running = bool(java_check.stdout.strip())
             pids = java_check.stdout.strip().split('\\n') if running else []
-            return {
+            return {{
                 'status': 'success',
                 'running': running,
                 'minecraft_pids': pids if running else []
-            }
+            }}
         
         else:
-            return {'error': f'Acción desconocida: {action}'}
+            return {{'error': f'Acción desconocida: {{action}}'}}
     
     except Exception as e:
         import traceback
-        return {'error': str(e), 'traceback': traceback.format_exc()}
+        return {{'error': str(e), 'traceback': traceback.format_exc()}}
 
 @app.route('/minecraft/start', methods=['POST'])
 def minecraft_start():
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     if token != AUTH_TOKEN:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({{'error': 'Unauthorized'}}), 401
     result = execute_minecraft_command('start')
     if 'error' in result:
         return jsonify(result), 500
@@ -156,7 +229,7 @@ def minecraft_start():
 def minecraft_stop():
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     if token != AUTH_TOKEN:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({{'error': 'Unauthorized'}}), 401
     result = execute_minecraft_command('stop')
     if 'error' in result:
         return jsonify(result), 500
@@ -170,36 +243,42 @@ def minecraft_status():
 @app.route('/health', methods=['GET'])
 def health():
     msx_path = find_msx_py()
-    return jsonify({
+    return jsonify({{
         'status': 'ok',
         'port': PORT,
         'msx_found': msx_path is not None,
         'msx_path': msx_path
-    })
+    }})
 
 @app.route('/get_token', methods=['GET'])
 def get_token():
-    return jsonify({
+    return jsonify({{
         'token': AUTH_TOKEN,
         'codespace_name': os.getenv('CODESPACE_NAME', 'unknown')
-    })
+    }})
 
 if __name__ == '__main__':
-    print(f"Servidor web escuchando en puerto {PORT}")
-    print(f"Token: {AUTH_TOKEN[:8]}...")
+    print(f"Servidor web escuchando en puerto {{PORT}}")
+    print(f"Token: {{AUTH_TOKEN[:8]}}...")
     msx_path = find_msx_py()
     if msx_path:
-        print(f"msx.py encontrado: {msx_path}")
+        print(f"msx.py encontrado: {{msx_path}}")
     app.run(host='0.0.0.0', port=PORT, debug=True)
 ''')
         os.chmod(webserver_path, 0o755)
 
         with open(sh_path, "w") as f:
-            f.write('''#!/bin/bash
+            f.write(f'''#!/bin/bash
 WORK_DIR="$HOME/.d0ce3_addons"
 cd "$WORK_DIR"
 
-if pgrep -f "python3.*web_server.py" > /dev/null; then
+SESSION_NAME="{session_name}"
+PORT={port}
+
+if tmux has-session -t $SESSION_NAME 2>/dev/null; then
+    if [ -n "$CODESPACE_NAME" ]; then
+        gh codespace ports visibility $PORT:public -c "$CODESPACE_NAME" >/dev/null 2>&1
+    fi
     exit 0
 fi
 
@@ -208,7 +287,7 @@ if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
         source ~/.bashrc
     else
         NEW_TOKEN=$(openssl rand -hex 32)
-        echo "export WEB_SERVER_AUTH_TOKEN=\"$NEW_TOKEN\"" >> ~/.bashrc
+        echo "export WEB_SERVER_AUTH_TOKEN=\\"$NEW_TOKEN\\"" >> ~/.bashrc
         export WEB_SERVER_AUTH_TOKEN="$NEW_TOKEN"
     fi
 fi
@@ -217,17 +296,22 @@ if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
     exit 1
 fi
 
-PORT=${PORT:-8080}
-
 if ! python3 -c "import flask" 2>/dev/null; then
     pip3 install flask >/dev/null 2>&1
 fi
 
-nohup python3 "$WORK_DIR/web_server.py" > /tmp/web_server.log 2>&1 &
-echo "Servidor web iniciado (puerto $PORT)"
-echo "Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
+tmux new-session -d -s $SESSION_NAME "python3 $WORK_DIR/web_server.py"
+
+sleep 2
+
+if [ -n "$CODESPACE_NAME" ]; then
+    gh codespace ports visibility $PORT:public -c "$CODESPACE_NAME" >/dev/null 2>&1
+fi
 ''')
         os.chmod(sh_path, 0o755)
+
+        webserver_config["version"] = CURRENT_WEBSERVER_VERSION
+        guardar_webserver_config(webserver_config)
 
         if os.path.exists(bashrc_path):
             with open(bashrc_path, "r") as f:
@@ -247,7 +331,7 @@ echo "Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
         for i in range(10):
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                result = sock.connect_ex(('localhost', 8080))
+                result = sock.connect_ex(('localhost', port))
                 sock.close()
                 if result == 0:
                     port_ready = True
@@ -257,43 +341,47 @@ echo "Token: ${WEB_SERVER_AUTH_TOKEN:0:8}..."
             time.sleep(1)
         
         if not port_ready:
-            print("⚠ Puerto 8080 no responde aún")
+            print(f"⚠ Puerto {port} no responde aún")
         
-        print("\n✓ Servidor web configurado")
-        print("💡 Puerto: 8080")
-        print("📋 Ver logs: tail -f /tmp/web_server.log")
+        print(f"\n✓ Servidor web configurado")
+        print(f"💡 Puerto: {port}")
+        print(f"📋 Ver logs: tmux attach -t {session_name}")
 
-        print("\n🌐 Configurando puerto 8080 como público...")
-        time.sleep(2)
-        try:
-            codespace_name = os.getenv('CODESPACE_NAME')
-            if codespace_name:
-                result = subprocess.run(
-                    ['gh', 'codespace', 'ports', 'visibility', '8080:public', '-c', codespace_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=15
-                )
-                if result.returncode == 0:
-                    verify = subprocess.run(
-                        ['gh', 'codespace', 'ports', '-c', codespace_name],
+        if webserver_config.get("auto_public", True):
+            print(f"\n🌐 Configurando puerto {port} como público...")
+            time.sleep(2)
+            try:
+                codespace_name = os.getenv('CODESPACE_NAME')
+                if codespace_name:
+                    result = subprocess.run(
+                        ['gh', 'codespace', 'ports', 'visibility', f'{port}:public', '-c', codespace_name],
                         capture_output=True,
                         text=True,
-                        timeout=10
+                        timeout=15
                     )
-                    if not ('8080' in verify.stdout and 'public' in verify.stdout.lower()):
-                        print("⚠ Verifica manualmente el puerto 8080")
+                    if result.returncode == 0:
+                        verify = subprocess.run(
+                            ['gh', 'codespace', 'ports', '-c', codespace_name],
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        if str(port) in verify.stdout and 'public' in verify.stdout.lower():
+                            print(f"✓ Puerto {port} está público")
+                        else:
+                            print(f"⚠ Verifica manualmente el puerto {port}")
+                    else:
+                        print("⚠ No se pudo configurar automáticamente")
                 else:
-                    print("⚠ No se pudo configurar automáticamente")
-            else:
-                print("⚠ No se puede configurar automáticamente")
-        except Exception as e:
-            print(f"⚠ Error: {str(e)}")
+                    print("⚠ No se puede configurar automáticamente")
+            except Exception as e:
+                print(f"⚠ Error: {str(e)}")
             
     except Exception as e:
         print(f"\n✗ Error: {e}")
-        utils.logger.error(f"Error en configuración web server: {e}")
-        import traceback
-        utils.logger.error(traceback.format_exc())
+        if utils:
+            utils.logger.error(f"Error en configuración web server: {e}")
+            import traceback
+            utils.logger.error(traceback.format_exc())
     
     return True
