@@ -334,19 +334,18 @@ def init():
     if logger_mod and config.CONFIG.get("debug_enabled", False):
         logger_mod.logger_manager.enable_debug()
 
-    utils = ModuleLoader.load_module("utils") 
-
     try:
-        from modules.observers import logger_observer
-        from modules.observers import discord_observer
-        
-        logger_observer.setup_logger_observer()
-        discord_observer.setup_discord_observer()
-        
-        utils.logger.debug("Sistema de eventos inicializado")
-
+        logger_observer = ModuleLoader.load_module("logger_observer")
+        discord_observer = ModuleLoader.load_module("discord_observer")
+        if logger_observer:
+            logger_observer.setup_logger_observer()
+        if discord_observer:
+            discord_observer.setup_discord_observer()
+        if utils and hasattr(utils, "logger"):
+            utils.logger.debug("Sistema de eventos inicializado")
     except Exception as e:
-        utils.logger.warning(f"No se pudo inicializar eventos: {e}")
+        if utils and hasattr(utils, "logger"):
+            utils.logger.warning(f"No se pudo inicializar eventos: {e}")
 
     if AutobackupManager.is_initialized():
         return
