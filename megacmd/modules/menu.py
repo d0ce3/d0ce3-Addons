@@ -203,12 +203,10 @@ class MenuBackup:
                 estado_texto = f"{Tema.ERROR} DESACTIVADO"
                 estado_color = Tema.rojo(estado_texto)
             
-            # FUNCIÓN 1: Elimina códigos ANSI para calcular longitud visual
             def len_sin_ansi(texto):
                 import re
                 return len(re.sub(r'\033\[[0-9;]*m', '', texto))
             
-            # FUNCIÓN 2: Crea una línea del cuadro con padding perfecto
             def pad_linea(label, valor_coloreado):
                 longitud_label = len(label) + 2
                 longitud_valor = len_sin_ansi(valor_coloreado)
