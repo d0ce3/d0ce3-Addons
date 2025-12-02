@@ -6,7 +6,7 @@ import glob
 import json
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
-CURRENT_WEBSERVER_VERSION = "1.0.1"
+CURRENT_WEBSERVER_VERSION = "1.0.0"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -312,10 +312,20 @@ cd "$WORK_DIR"
 SESSION_NAME="{session_name}"
 PORT={port}
 
-if tmux has-session -t $SESSION_NAME 2>/dev/null; then
+configure_public_port() {{
     if [ -n "$CODESPACE_NAME" ]; then
-        gh codespace ports visibility $PORT:public -c "$CODESPACE_NAME" >/dev/null 2>&1
+        for i in {{1..3}}; do
+            gh codespace ports visibility $PORT:public -c "$CODESPACE_NAME" >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                return 0
+            fi
+            sleep 2
+        done
     fi
+}}
+
+if tmux has-session -t $SESSION_NAME 2>/dev/null; then
+    configure_public_port
     exit 0
 fi
 
@@ -345,11 +355,9 @@ fi
 
 tmux new-session -d -s $SESSION_NAME "python3 $WORK_DIR/web_server.py"
 
-sleep 2
+sleep 3
 
-if [ -n "$CODESPACE_NAME" ]; then
-    gh codespace ports visibility $PORT:public -c "$CODESPACE_NAME" >/dev/null 2>&1
-fi
+configure_public_port
 ''')
         os.chmod(sh_path, 0o755)
 
