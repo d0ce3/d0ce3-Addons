@@ -4,15 +4,18 @@ import time
 import socket
 import glob
 import json
-import requests
+import threading
+import re
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
-CURRENT_WEBSERVER_VERSION = "1.0.0"
+TUNNEL_URL_FILE = os.path.expanduser("~/.d0ce3_addons/tunnel_url.txt")
+CURRENT_WEBSERVER_VERSION = "1.5.0"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
     "session_name": "msx",
     "auto_public": True,
+    "use_cloudflare": True,
     "version": CURRENT_WEBSERVER_VERSION
 }
 
@@ -93,6 +96,15 @@ def limpiar_bashrc_duplicados():
     except:
         pass
 
+def get_tunnel_url():
+    if os.path.exists(TUNNEL_URL_FILE):
+        try:
+            with open(TUNNEL_URL_FILE, 'r') as f:
+                return f.read().strip()
+        except:
+            return None
+    return None
+
 def auto_configurar_web_server():
     utils = CloudModuleLoader.load_module("utils")
     config = CloudModuleLoader.load_module("config")
@@ -102,7 +114,7 @@ def auto_configurar_web_server():
     work_dir = os.path.expanduser("~/.d0ce3_addons")
     sh_path = os.path.join(work_dir, "start_web_server.sh")
     webserver_path = os.path.join(work_dir, "web_server.py")
-    port_watcher_path = os.path.join(work_dir, "port_watcher.py")
+    tunnel_manager_path = os.path.join(work_dir, "tunnel_manager.py")
     bashrc_path = os.path.expanduser("~/.bashrc")
     bashrc_line = f"[ -f '{sh_path}' ] && (bash {sh_path} > /dev/null 2>&1 &); disown 2>/dev/null"
 
@@ -119,11 +131,12 @@ def auto_configurar_web_server():
         todo_instalado = (
             os.path.exists(webserver_path) and
             os.path.exists(sh_path) and
-            os.path.exists(port_watcher_path)
+            os.path.exists(tunnel_manager_path)
         )
         
         session_name = webserver_config.get("session_name", "msx")
         port = webserver_config.get("port", 8080)
+        use_cloudflare = webserver_config.get("use_cloudflare", True)
         
         check_running = subprocess.run(
             ['tmux', 'has-session', '-t', session_name],
@@ -136,6 +149,14 @@ def auto_configurar_web_server():
                 print(f"✓ Servidor web ya está configurado y corriendo")
                 print(f"💡 Puerto: {port}")
                 print(f"📋 Ver logs: tmux attach -t {session_name}")
+                
+                if use_cloudflare:
+                    tunnel_url = get_tunnel_url()
+                    if tunnel_url:
+                        print(f"🌐 URL pública: {tunnel_url}")
+                    else:
+                        print(f"⚠ URL pública no disponible aún")
+                
                 print()
                 return True
         
@@ -150,92 +171,102 @@ def auto_configurar_web_server():
         
         os.makedirs(work_dir, exist_ok=True)
 
-        with open(port_watcher_path, "w") as f:
+        with open(tunnel_manager_path, "w") as f:
             f.write(f'''#!/usr/bin/env python3
 import subprocess
 import os
 import time
-import json
+import re
+import threading
 
 PORT = {port}
-CODESPACE_NAME = os.getenv('CODESPACE_NAME')
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-MAX_ATTEMPTS = 60
-CHECK_INTERVAL = 5
+TUNNEL_URL_FILE = "{TUNNEL_URL_FILE}"
 
-def get_port_visibility():
-    try:
-        result = subprocess.run(
-            ['gh', 'codespace', 'ports', '-c', CODESPACE_NAME],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode != 0:
-            return None
-        
-        for line in result.stdout.split('\\n'):
-            if str(PORT) in line:
-                if 'public' in line.lower():
-                    return 'public'
-                elif 'private' in line.lower():
-                    return 'private'
-        return None
-    except:
-        return None
-
-def set_port_public_api():
-    if not CODESPACE_NAME or not GITHUB_TOKEN:
-        return False
+def install_cloudflared():
+    print("🔍 Verificando cloudflared...")
     
     try:
-        result = subprocess.run(
-            ['gh', 'api', 'user', '--jq', '.login'],
-            capture_output=True,
+        subprocess.run(['cloudflared', '--version'], capture_output=True, check=True, timeout=5)
+        print("✅ cloudflared ya instalado")
+        return True
+    except:
+        print("📦 Instalando cloudflared...")
+        
+        try:
+            arch_check = subprocess.run(['uname', '-m'], capture_output=True, text=True)
+            arch = arch_check.stdout.strip()
+            
+            if arch == 'x86_64':
+                binary = 'cloudflared-linux-amd64'
+            elif arch == 'aarch64':
+                binary = 'cloudflared-linux-arm64'
+            else:
+                binary = 'cloudflared-linux-amd64'
+            
+            install_commands = f"""
+                curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/{{binary}} -o /tmp/cloudflared && \\
+                chmod +x /tmp/cloudflared && \\
+                sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
+            """
+            
+            subprocess.run(['bash', '-c', install_commands], check=True, capture_output=True, timeout=60)
+            print("✅ cloudflared instalado")
+            return True
+        except Exception as e:
+            print(f"❌ Error instalando cloudflared: {{e}}")
+            return False
+
+def start_tunnel():
+    print(f"🔄 Creando túnel Cloudflare para puerto {{PORT}}...")
+    
+    try:
+        tunnel_process = subprocess.Popen(
+            ['cloudflared', 'tunnel', '--url', f'http://localhost:{{PORT}}'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=5
+            bufsize=1
         )
         
-        if result.returncode != 0:
-            return False
+        public_url = None
         
-        api_url = f"https://api.github.com/user/codespaces/{{CODESPACE_NAME}}/ports/{{PORT}}"
+        def read_tunnel_output():
+            nonlocal public_url
+            for line in tunnel_process.stderr:
+                if 'trycloudflare.com' in line:
+                    match = re.search(r'https://[a-z0-9-]+\\.trycloudflare\\.com', line)
+                    if match and not public_url:
+                        public_url = match.group(0)
+                        print(f"✅ Túnel público creado: {{public_url}}")
+                        
+                        with open(TUNNEL_URL_FILE, 'w') as f:
+                            f.write(public_url)
         
-        cmd = [
-            'curl', '-s', '-X', 'PATCH',
-            '-H', 'Accept: application/vnd.github+json',
-            '-H', f'Authorization: Bearer {{GITHUB_TOKEN}}',
-            '-H', 'X-GitHub-Api-Version: 2022-11-28',
-            '-d', '{{"visibility":"public"}}',
-            api_url
-        ]
+        tunnel_thread = threading.Thread(target=read_tunnel_output, daemon=True)
+        tunnel_thread.start()
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        for i in range(60):
+            if public_url:
+                return True
+            time.sleep(0.5)
         
-        if result.returncode == 0 and 'public' in result.stdout:
-            return True
-        
+        print("⚠️ Túnel creado pero URL no capturada")
+        return True
+    except Exception as e:
+        print(f"❌ Error creando túnel: {{e}}")
         return False
-    except:
-        return False
-
-def main():
-    for attempt in range(MAX_ATTEMPTS):
-        visibility = get_port_visibility()
-        
-        if visibility == 'public':
-            break
-        elif visibility == 'private':
-            if set_port_public_api():
-                break
-        
-        time.sleep(CHECK_INTERVAL)
 
 if __name__ == '__main__':
-    main()
+    if install_cloudflared():
+        start_tunnel()
+        
+        try:
+            while True:
+                time.sleep(60)
+        except KeyboardInterrupt:
+            pass
 ''')
-        os.chmod(port_watcher_path, 0o755)
+        os.chmod(tunnel_manager_path, 0o755)
 
         with open(webserver_path, "w") as f:
             f.write(f'''#!/usr/bin/env python3
@@ -339,11 +370,19 @@ def minecraft_status():
 @app.route('/health', methods=['GET'])
 def health():
     msx_path = find_msx_py()
+    tunnel_url = None
+    try:
+        with open('{TUNNEL_URL_FILE}', 'r') as f:
+            tunnel_url = f.read().strip()
+    except:
+        pass
+    
     return jsonify({{
         'status': 'ok',
         'port': PORT,
         'msx_found': msx_path is not None,
-        'msx_path': msx_path
+        'msx_path': msx_path,
+        'tunnel_url': tunnel_url
     }})
 
 @app.route('/get_token', methods=['GET'])
@@ -370,6 +409,7 @@ cd "$WORK_DIR"
 
 SESSION_NAME="{session_name}"
 PORT={port}
+USE_CLOUDFLARE={str(use_cloudflare).lower()}
 
 if tmux has-session -t $SESSION_NAME 2>/dev/null; then
     exit 0
@@ -380,7 +420,7 @@ if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
     
     if grep -q "^export WEB_SERVER_AUTH_TOKEN=" "$BASHRC" 2>/dev/null; then
         source "$BASHRC"
-    else
+    else:
         NEW_TOKEN=$(openssl rand -hex 32)
         
         grep -v "^export WEB_SERVER_AUTH_TOKEN=" "$BASHRC" > "$BASHRC.tmp" 2>/dev/null || touch "$BASHRC.tmp"
@@ -401,7 +441,9 @@ fi
 
 tmux new-session -d -s $SESSION_NAME "python3 $WORK_DIR/web_server.py"
 
-nohup python3 "$WORK_DIR/port_watcher.py" > /dev/null 2>&1 &
+if [ "$USE_CLOUDFLARE" = "true" ]; then
+    nohup python3 "$WORK_DIR/tunnel_manager.py" > /dev/null 2>&1 &
+fi
 ''')
         os.chmod(sh_path, 0o755)
 
@@ -442,7 +484,11 @@ nohup python3 "$WORK_DIR/port_watcher.py" > /dev/null 2>&1 &
         print(f"\n✓ Servidor web configurado")
         print(f"💡 Puerto: {port}")
         print(f"📋 Ver logs: tmux attach -t {session_name}")
-        print(f"🔍 Port watcher ejecutándose en background")
+        
+        if use_cloudflare:
+            print(f"🌐 Cloudflare Tunnel activado")
+            print(f"⏳ URL pública disponible en ~10 segundos")
+            print(f"📄 Ver URL: cat {TUNNEL_URL_FILE}")
             
     except Exception as e:
         print(f"\n✗ Error: {e}")
