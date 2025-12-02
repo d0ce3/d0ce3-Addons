@@ -2,31 +2,30 @@
 
 echo "📦 Creando paquete de d0ce3..."
 
-# Leer versión de links.json
 VERSION=$(grep -oP '"version":\s*"\K[^"]+' data/links.json | head -1)
 
 echo "📌 Versión: $VERSION"
 
-# Crear directorio temporal
 rm -rf /tmp/megacmd_package
 mkdir -p /tmp/megacmd_package/modules
+mkdir -p /tmp/megacmd_package/core
 
 # Copiar archivos
 echo "📋 Copiando archivos..."
+
 cp megacmd/d0ce3tools.addon /tmp/megacmd_package/
 cp megacmd/d0ce3_tools.py /tmp/megacmd_package/
 cp megacmd/modules/*.py /tmp/megacmd_package/modules/
+cp megacmd/core/*.py /tmp/megacmd_package/core/
 
-# Crear ZIP
 echo "🗜️ Comprimiendo..."
+
 cd /tmp/megacmd_package
 zip -r -q d0ce3tools_${VERSION}.zip .
 cd - > /dev/null
 
-# Mover a destino
 mv /tmp/megacmd_package/d0ce3tools_${VERSION}.zip megacmd/
 
-# Limpiar
 rm -rf /tmp/megacmd_package
 
 echo "✅ Paquete creado: megacmd/d0ce3tools_${VERSION}.zip"
