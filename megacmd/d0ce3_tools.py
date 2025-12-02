@@ -116,7 +116,6 @@ class ModuleLoader:
     
     @staticmethod
     def _ensure_package_manager_available():
-        """Carga el package_manager desde el cache si existe"""
         if ModuleLoader._package_manager is not None:
             return ModuleLoader._package_manager
         
@@ -171,15 +170,19 @@ class ModuleLoader:
             if os.path.exists(CACHE_DIR):
                 shutil.rmtree(CACHE_DIR)
             
-            os.makedirs(PACKAGE_DIR, exist_ok=True)
+            os.makedirs(CACHE_DIR, exist_ok=True)
             
             with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
                 for member in zip_ref.namelist():
-                    if member.startswith('modules/') and member.endswith('.py'):
-                        filename = os.path.basename(member)
-                        content = zip_ref.open(member).read()
-                        with open(os.path.join(PACKAGE_DIR, filename), 'wb') as target:
-                            target.write(content)
+                    if member.startswith('modules/') or member.startswith('core/'):
+                        target_path = os.path.join(CACHE_DIR, member)
+                        
+                        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                        
+                        if not member.endswith('/'):
+                            with zip_ref.open(member) as source:
+                                with open(target_path, 'wb') as target:
+                                    target.write(source.read())
             
             os.remove(temp_zip)
             return True
@@ -230,7 +233,7 @@ class ModuleLoader:
             
             return module
         except Exception as e:
-            print(f"⚠ Error cargando módulo {module_name}: {e}")
+            print(f"⚠  Error cargando modulo {module_name}: {e}")
             return None
     
     @staticmethod
@@ -266,7 +269,7 @@ def call_module_function(module_name, function_name):
     if module and hasattr(module, function_name):
         getattr(module, function_name)()
     else:
-        print(f"❌ Error: función {function_name} no disponible")
+        print(f"âŒ Error: funcion {function_name} no disponible")
         input("\n[+] Enter para continuar...")
 
 def get_menu_instances():
@@ -299,7 +302,6 @@ info_cuenta_mega = lambda: (lambda m: m[1].info_cuenta() if m[1] else call_modul
 toggle_autobackup = configurar_autobackup
 
 def menu_discord():
-    """Abre el menú principal de Discord"""
     call_module_function("dc_menu", "menu_principal_discord")
 
 def actualizar_modulos():
