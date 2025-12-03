@@ -9,7 +9,7 @@ import re
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
 TUNNEL_URL_FILE = os.path.expanduser("~/.d0ce3_addons/tunnel_url.txt")
-CURRENT_WEBSERVER_VERSION = "1.0.0"
+CURRENT_WEBSERVER_VERSION = "1.0.1"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -139,7 +139,7 @@ def auto_configurar_web_server():
         use_cloudflare = webserver_config.get("use_cloudflare", True)
         
         check_running = subprocess.run(
-            ['tmux', 'has-session', '-t', session_name],
+            ['tmux', 'has-session', '-t', 'webserver'],
             capture_output=True
         )
         servidor_corriendo = check_running.returncode == 0
@@ -148,7 +148,7 @@ def auto_configurar_web_server():
             if servidor_corriendo:
                 print(f"✓ Servidor web ya está configurado y corriendo")
                 print(f"💡 Puerto: {port}")
-                print(f"📋 Ver logs: tmux attach -t {session_name}")
+                print(f"📋 Ver logs: tmux attach -t webserver")
                 
                 if use_cloudflare:
                     tunnel_url = get_tunnel_url()
@@ -163,8 +163,8 @@ def auto_configurar_web_server():
         if necesita_actualizacion(webserver_config):
             print(f"🔄 Actualizando servidor web ({webserver_config.get('version', '0.0.0')} → {CURRENT_WEBSERVER_VERSION})...\n")
             if servidor_corriendo:
-                print(f"🛑 Deteniendo sesión {session_name}...")
-                subprocess.run(['tmux', 'kill-session', '-t', session_name], capture_output=True)
+                print(f"🛑 Deteniendo sesión webserver...")
+                subprocess.run(['tmux', 'kill-session', '-t', 'webserver'], capture_output=True)
                 time.sleep(1)
         else:
             print("📦 Instalando servidor web de control...\n")
@@ -293,27 +293,33 @@ def execute_minecraft_command(action):
         repo_root = os.path.dirname(msx_path)
         
         if action == 'start':
-            process = subprocess.Popen(
-                ['bash', '-c', f'cd {{repo_root}} && echo "1" | python3 msx.py'],
+            result = subprocess.run(
+                ['tmux', 'has-session', '-t', 'msx'],
+                capture_output=True
+            )
+            
+            if result.returncode == 0:
+                return {{
+                    'status': 'success',
+                    'action': 'start',
+                    'message': 'Servidor ya está corriendo en tmux sesión msx'
+                }}
+            
+            subprocess.Popen(
+                ['tmux', 'new-session', '-d', '-s', 'msx', 'bash', '-c', 
+                 f'cd {{repo_root}} && echo "1" | python3 msx.py; exec bash'],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=os.environ.copy()
+                stderr=subprocess.PIPE
             )
             time.sleep(1)
             return {{
                 'status': 'success',
                 'action': 'start',
-                'message': 'Servidor Minecraft iniciando...',
-                'pid': process.pid
+                'message': 'Servidor Minecraft iniciando en tmux sesión msx'
             }}
         
         elif action == 'stop':
-            process = subprocess.Popen(
-                ['bash', '-c', f'cd {{repo_root}} && echo "2" | python3 msx.py'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=os.environ.copy()
-            )
+            subprocess.run(['tmux', 'send-keys', '-t', 'msx', 'C-c'])
             time.sleep(1)
             return {{
                 'status': 'success',
@@ -404,12 +410,7 @@ def get_url():
     return jsonify({{'tunnel_url': tunnel_url}})
 
 if __name__ == '__main__':
-    print(f"Servidor web escuchando en puerto {{PORT}}")
-    print(f"Token: {{AUTH_TOKEN[:8]}}...")
-    msx_path = find_msx_py()
-    if msx_path:
-        print(f"msx.py encontrado: {{msx_path}}")
-    app.run(host='0.0.0.0', port=PORT, debug=True)
+    app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
 ''')
         os.chmod(webserver_path, 0o755)
 
@@ -418,7 +419,7 @@ if __name__ == '__main__':
 WORK_DIR="$HOME/.d0ce3_addons"
 cd "$WORK_DIR"
 
-SESSION_NAME="{session_name}"
+SESSION_NAME="webserver"
 PORT={port}
 USE_CLOUDFLARE={str(use_cloudflare).lower()}
 
@@ -451,13 +452,10 @@ if ! python3 -c "import flask" 2>/dev/null; then
 fi
 
 if [ -n "$CODESPACE_NAME" ]; then
-    echo "⏳ Configurando puerto $PORT como público..."
-    
     for i in {{1..30}}; do
         VISIBILITY=$(gh codespace ports -c "$CODESPACE_NAME" 2>/dev/null | grep "^$PORT" | awk '{{print $3}}')
         
         if [ "$VISIBILITY" = "public" ]; then
-            echo "✅ Puerto $PORT está público"
             break
         fi
         
@@ -511,7 +509,8 @@ fi
         
         print(f"\n✓ Servidor web configurado")
         print(f"💡 Puerto: {port}")
-        print(f"📋 Ver logs: tmux attach -t {session_name}")
+        print(f"📋 Ver logs web: tmux attach -t webserver")
+        print(f"📋 Ver logs msx: tmux attach -t msx")
         
         if use_cloudflare:
             print(f"🌐 Cloudflare Tunnel activado")
