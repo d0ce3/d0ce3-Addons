@@ -9,7 +9,7 @@ import re
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
 TUNNEL_URL_FILE = os.path.expanduser("~/.d0ce3_addons/tunnel_url.txt")
-CURRENT_WEBSERVER_VERSION = "1.0.1"
+CURRENT_WEBSERVER_VERSION = "1.0.2"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -148,7 +148,10 @@ def auto_configurar_web_server():
             if servidor_corriendo:
                 print(f"✓ Servidor web ya está configurado y corriendo")
                 print(f"💡 Puerto: {port}")
-                print(f"📋 Ver logs: tmux attach -t webserver")
+                print(f"📋 Ver logs msx: tmux attach -t msx, con este comando vas a poder acceder a la terminal normalmente")
+                print(f" Usa ese comando unicamente si queres ver los logs o interactuar con la terminal.")
+                print(f" Si queres salir de la termianal sin detener el servidor, presiona Ctrl+B y luego D.")
+                print(f" Tambien creo que no hace falta aclarar, esto unicamente funciona si el servidor de Minecraft fue iniciado desde discord")
                 
                 if use_cloudflare:
                     tunnel_url = get_tunnel_url()
@@ -293,38 +296,53 @@ def execute_minecraft_command(action):
         repo_root = os.path.dirname(msx_path)
         
         if action == 'start':
-            result = subprocess.run(
-                ['tmux', 'has-session', '-t', 'msx'],
+            check = subprocess.run(
+                ["tmux", "has-session", "-t", "msx"],
                 capture_output=True
             )
             
-            if result.returncode == 0:
+            if check.returncode == 0:
                 return {{
                     'status': 'success',
                     'action': 'start',
-                    'message': 'Servidor ya está corriendo en tmux sesión msx'
+                    'message': 'Servidor ya está corriendo en tmux sesión msx',
+                    'attach_command': 'tmux attach -t msx'
                 }}
             
-            subprocess.Popen(
-                ['tmux', 'new-session', '-d', '-s', 'msx', 'bash', '-c', 
-                 f'cd {{repo_root}} && echo "1" | python3 msx.py; exec bash'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+            subprocess.run(
+                ["tmux", "new-session", "-d", "-s", "msx", "-c", repo_root],
+                check=True
             )
-            time.sleep(1)
+            
+            subprocess.run(
+                ["tmux", "send-keys", "-t", "msx", "python3 msx.py", "C-m"],
+                check=True
+            )
+            
+            time.sleep(2)
+            
+            subprocess.run(
+                ["tmux", "send-keys", "-t", "msx", "1", "C-m"],
+                check=True
+            )
+            
             return {{
                 'status': 'success',
                 'action': 'start',
-                'message': 'Servidor Minecraft iniciando en tmux sesión msx'
+                'message': 'Minecraft iniciando en tmux sesión msx',
+                'attach_command': 'tmux attach -t msx'
             }}
         
         elif action == 'stop':
-            subprocess.run(['tmux', 'send-keys', '-t', 'msx', 'C-c'])
+            subprocess.run(
+                ["tmux", "send-keys", "-t", "msx", "2", "C-m"],
+                capture_output=True
+            )
             time.sleep(1)
             return {{
                 'status': 'success',
                 'action': 'stop',
-                'message': 'Comando stop enviado al servidor'
+                'message': 'Comando de stop enviado a la sesión msx'
             }}
         
         elif action == 'status':
@@ -509,13 +527,14 @@ fi
         
         print(f"\n✓ Servidor web configurado")
         print(f"💡 Puerto: {port}")
-        print(f"📋 Ver logs web: tmux attach -t webserver")
-        print(f"📋 Ver logs msx: tmux attach -t msx")
+        print(f"📋 Ver logs msx: tmux attach -t msx, con este comando vas a poder acceder a la terminal normalmente")
+        print(f" Usa ese comando unicamente si queres ver los logs o interactuar con la terminal.")
+        print(f" Si queres salir de la termianal sin detener el servidor, presiona Ctrl+B y luego D.")
+        print(f" Tambien creo que no hace falta aclarar, esto unicamente funciona si el servidor de Minecraft fue iniciado desde discord")
         
         if use_cloudflare:
             print(f"🌐 Cloudflare Tunnel activado")
             print(f"⏳ URL pública disponible en ~10 segundos")
-            print(f"📄 Ver URL: cat {TUNNEL_URL_FILE}")
             
     except Exception as e:
         print(f"\n✗ Error: {e}")
