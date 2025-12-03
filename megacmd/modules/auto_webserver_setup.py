@@ -9,7 +9,7 @@ import re
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
 TUNNEL_URL_FILE = os.path.expanduser("~/.d0ce3_addons/tunnel_url.txt")
-CURRENT_WEBSERVER_VERSION = "1.0.2"
+CURRENT_WEBSERVER_VERSION = "1.0.0"
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -392,6 +392,17 @@ def get_token():
         'codespace_name': os.getenv('CODESPACE_NAME', 'unknown')
     }})
 
+@app.route('/get_url', methods=['GET'])
+def get_url():
+    tunnel_url = None
+    try:
+        with open('{TUNNEL_URL_FILE}', 'r') as f:
+            tunnel_url = f.read().strip()
+    except:
+        pass
+    
+    return jsonify({{'tunnel_url': tunnel_url}})
+
 if __name__ == '__main__':
     print(f"Servidor web escuchando en puerto {{PORT}}")
     print(f"Token: {{AUTH_TOKEN[:8]}}...")
@@ -420,7 +431,7 @@ if [ -z "$WEB_SERVER_AUTH_TOKEN" ]; then
     
     if grep -q "^export WEB_SERVER_AUTH_TOKEN=" "$BASHRC" 2>/dev/null; then
         source "$BASHRC"
-    else:
+    else
         NEW_TOKEN=$(openssl rand -hex 32)
         
         grep -v "^export WEB_SERVER_AUTH_TOKEN=" "$BASHRC" > "$BASHRC.tmp" 2>/dev/null || touch "$BASHRC.tmp"
@@ -437,6 +448,23 @@ fi
 
 if ! python3 -c "import flask" 2>/dev/null; then
     pip3 install flask >/dev/null 2>&1
+fi
+
+if [ -n "$CODESPACE_NAME" ]; then
+    echo "⏳ Configurando puerto $PORT como público..."
+    
+    for i in {{1..30}}; do
+        VISIBILITY=$(gh codespace ports -c "$CODESPACE_NAME" 2>/dev/null | grep "^$PORT" | awk '{{print $3}}')
+        
+        if [ "$VISIBILITY" = "public" ]; then
+            echo "✅ Puerto $PORT está público"
+            break
+        fi
+        
+        gh codespace ports visibility $PORT:public -c "$CODESPACE_NAME" >/dev/null 2>&1
+        
+        sleep 2
+    done
 fi
 
 tmux new-session -d -s $SESSION_NAME "python3 $WORK_DIR/web_server.py"
