@@ -10,7 +10,7 @@ import requests
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
 TUNNEL_URL_FILE = os.path.expanduser("~/.d0ce3_addons/tunnel_url.txt")
-CURRENT_WEBSERVER_VERSION = "1.0.0"
+CURRENT_WEBSERVER_VERSION = "1.1.0"
 
 DISCORD_USER_ID = os.getenv("DISCORD_USER_ID")
 BOT_WEBHOOK_URL = os.getenv("BOT_WEBHOOK_URL", "https://doce-bt.onrender.com/webhook/tunnel_notify")
@@ -214,12 +214,18 @@ def auto_configurar_web_server():
                         print(f"🌐 URL pública: {tunnel_url}")
                         
                         if DISCORD_USER_ID:
+                            print(f"🔔 Notificando al bot...")
                             notify_bot_webhook(tunnel_url, "cloudflare", port)
                     else:
                         print(f"⚠ URL pública no disponible aún")
                 
                 print()
                 return True
+            else:
+                print(f"⚠️ Servidor no está corriendo, reiniciando...")
+        
+        if not servidor_corriendo:
+            pass
         
         if necesita_actualizacion(webserver_config):
             print(f"🔄 Actualizando servidor web ({webserver_config.get('version', '0.0.0')} → {CURRENT_WEBSERVER_VERSION})...\n")
