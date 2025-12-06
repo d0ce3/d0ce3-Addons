@@ -6,10 +6,15 @@ import glob
 import json
 import threading
 import re
+import requests
 
 WEBSERVER_CONFIG_FILE = os.path.expanduser("~/.d0ce3_addons/webserver_config.json")
 TUNNEL_URL_FILE = os.path.expanduser("~/.d0ce3_addons/tunnel_url.txt")
-CURRENT_WEBSERVER_VERSION = "1.0.2"
+CURRENT_WEBSERVER_VERSION = "1.0.0"
+
+DISCORD_USER_ID = os.getenv("DISCORD_USER_ID")
+BOT_WEBHOOK_URL = os.getenv("BOT_WEBHOOK_URL", "https://doce-bt.onrender.com/webhook/tunnel_notify")
+BOT_API_URL = os.getenv("BOT_API_URL", "https://doce-bt.onrender.com/api")
 
 DEFAULT_WEBSERVER_CONFIG = {
     "port": 8080,
@@ -105,6 +110,56 @@ def get_tunnel_url():
             return None
     return None
 
+def get_config_from_bot():
+    if not DISCORD_USER_ID:
+        return None
+    
+    try:
+        response = requests.get(
+            f"{BOT_API_URL}/user/config/{DISCORD_USER_ID}",
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+    except:
+        pass
+    return None
+
+def notify_bot_webhook(tunnel_url, tunnel_type="cloudflare", tunnel_port=8080, voicechat_address=None):
+    if not DISCORD_USER_ID:
+        return False
+    
+    try:
+        codespace_name = os.getenv("CODESPACE_NAME", "unknown")
+        
+        payload = {
+            "user_id": DISCORD_USER_ID,
+            "codespace_name": codespace_name,
+            "tunnel_url": tunnel_url,
+            "tunnel_port": tunnel_port,
+            "tunnel_type": tunnel_type,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+        
+        if voicechat_address:
+            payload["voicechat_address"] = voicechat_address
+        
+        response = requests.post(
+            BOT_WEBHOOK_URL,
+            json=payload,
+            timeout=15
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("notification_sent"):
+                print("📨 Bot notificado - Usuario recibirá DM en Discord")
+            return True
+    except:
+        pass
+    return False
+
 def auto_configurar_web_server():
     utils = CloudModuleLoader.load_module("utils")
     config = CloudModuleLoader.load_module("config")
@@ -157,6 +212,9 @@ def auto_configurar_web_server():
                     tunnel_url = get_tunnel_url()
                     if tunnel_url:
                         print(f"🌐 URL pública: {tunnel_url}")
+                        
+                        if DISCORD_USER_ID:
+                            notify_bot_webhook(tunnel_url, "cloudflare", port)
                     else:
                         print(f"⚠ URL pública no disponible aún")
                 
@@ -181,9 +239,12 @@ import os
 import time
 import re
 import threading
+import requests
 
 PORT = {port}
 TUNNEL_URL_FILE = "{TUNNEL_URL_FILE}"
+DISCORD_USER_ID = os.getenv("DISCORD_USER_ID")
+BOT_WEBHOOK_URL = os.getenv("BOT_WEBHOOK_URL", "{BOT_WEBHOOK_URL}")
 
 def install_cloudflared():
     print("🔍 Verificando cloudflared...")
@@ -219,6 +280,31 @@ def install_cloudflared():
             print(f"❌ Error instalando cloudflared: {{e}}")
             return False
 
+def notify_bot(tunnel_url):
+    if not DISCORD_USER_ID:
+        return False
+    
+    try:
+        codespace_name = os.getenv("CODESPACE_NAME", "unknown")
+        
+        payload = {{
+            "user_id": DISCORD_USER_ID,
+            "codespace_name": codespace_name,
+            "tunnel_url": tunnel_url,
+            "tunnel_port": PORT,
+            "tunnel_type": "cloudflare",
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }}
+        
+        response = requests.post(BOT_WEBHOOK_URL, json=payload, timeout=15)
+        
+        if response.status_code == 200:
+            print("📨 Bot notificado - Usuario recibirá DM")
+            return True
+    except:
+        pass
+    return False
+
 def start_tunnel():
     print(f"🔄 Creando túnel Cloudflare para puerto {{PORT}}...")
     
@@ -244,6 +330,8 @@ def start_tunnel():
                         
                         with open(TUNNEL_URL_FILE, 'w') as f:
                             f.write(public_url)
+                        
+                        notify_bot(public_url)
         
         tunnel_thread = threading.Thread(target=read_tunnel_output, daemon=True)
         tunnel_thread.start()
@@ -469,6 +557,10 @@ if ! python3 -c "import flask" 2>/dev/null; then
     pip3 install flask >/dev/null 2>&1
 fi
 
+if ! python3 -c "import requests" 2>/dev/null; then
+    pip3 install requests >/dev/null 2>&1
+fi
+
 if [ -n "$CODESPACE_NAME" ]; then
     for i in {{1..30}}; do
         VISIBILITY=$(gh codespace ports -c "$CODESPACE_NAME" 2>/dev/null | grep "^$PORT" | awk '{{print $3}}')
@@ -506,6 +598,11 @@ fi
             import flask
         except ImportError:
             subprocess.call(["pip3", "install", "-q", "flask"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        try:
+            import requests
+        except ImportError:
+            subprocess.call(["pip3", "install", "-q", "requests"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         subprocess.Popen(['bash', sh_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
@@ -535,6 +632,9 @@ fi
         if use_cloudflare:
             print(f"🌐 Cloudflare Tunnel activado")
             print(f"⏳ URL pública disponible en ~10 segundos")
+            
+            if DISCORD_USER_ID:
+                print(f"📨 Bot será notificado automáticamente cuando el tunnel esté listo")
             
     except Exception as e:
         print(f"\n✗ Error: {e}")
