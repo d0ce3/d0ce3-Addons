@@ -1,6 +1,7 @@
 import os
 import subprocess
 import time
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 TIMEZONE_ARG = timezone(timedelta(hours=-3))
@@ -52,86 +53,59 @@ def comprimir_con_manejo_archivos_activos(carpeta_origen, archivo_destino, max_i
                 except Exception as e:
                     utils.logger.warning(f"No se pudo eliminar archivo previo: {e}")
             
-            # Usar flags especiales de zip para manejar archivos activos:
-            # -r: recursivo
-            # -q: quiet (sin output)
-            # -FS: sincronización de archivos (reintenta si archivo cambió durante lectura)
-            # -y: preservar symlinks
-            cmd = ["zip", "-r", "-q", "-FS", "-y", archivo_destino, folder_name]
-            
-            utils.logger.info(f"Ejecutando: {' '.join(cmd)}")
-            
-            resultado = subprocess.run(
-                cmd,
-                cwd=parent_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=600,
-                text=True
-            )
-            
-            # Verificar resultado
-            # zip retorna 0=ok, 2=warnings (archivos cambiaron pero zip ok), 18=algunos archivos no legibles
-            if resultado.returncode in [0, 2, 12, 18]:
-                if os.path.exists(backup_path) and os.path.getsize(backup_path) > 1024:
-                    size_mb = os.path.getsize(backup_path) / (1024 * 1024)
-                    
-                    if resultado.returncode != 0:
-                        utils.logger.warning(
-                            f"Compresión completada con warnings (código {resultado.returncode}). "
-                            f"Esto es normal si archivos cambiaron durante el backup."
-                        )
-                    
-                    utils.logger.info(f"Compresión exitosa: {archivo_destino} ({size_mb:.1f} MB)")
-                    return (True, backup_path, None)
-                else:
-                    error = "Archivo ZIP creado pero inválido (muy pequeño o vacío)"
-                    utils.logger.error(error)
-                    if intento < max_intentos:
-                        espera = intento * 2
-                        utils.logger.info(f"Esperando {espera}s antes de reintentar...")
-                        time.sleep(espera)
-                        continue
-                    return (False, None, error)
-            else:
-                error = f"zip falló con código {resultado.returncode}: {resultado.stderr}"
-                utils.logger.error(error)
-                
-                if intento < max_intentos:
-                    espera = intento * 2
-                    utils.logger.info(f"Esperando {espera}s antes de reintentar...")
-                    time.sleep(espera)
-                    continue
-                else:
-                    return (False, None, error)
-        
-        except subprocess.TimeoutExpired:
-            error = "Timeout en compresión (>10 min)"
-            utils.logger.error(error)
+            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(carpeta_origen):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, carpeta_origen)
+                        arcname = os.path.join(folder_name, arcname)
+                        
+                        try:
+                            zipf.write(file_path, arcname)
+                        except Exception as e:
+                            if intento == max_intentos:
+                                utils.logger.debug(f"No se pudo agregar {file}: {e}")
             
             if os.path.exists(backup_path):
+                size = os.path.getsize(backup_path)
+                
+                if size < 1024:
+                    error = "ZIP muy pequeño (< 1KB)"
+                    utils.logger.error(error)
+                    if intento < max_intentos:
+                        time.sleep(intento * 2)
+                        continue
+                    return (False, None, error)
+                
                 try:
-                    os.remove(backup_path)
-                    utils.logger.info("Archivo corrupto eliminado tras timeout")
-                except:
-                    pass
-            
-            if intento < max_intentos:
-                espera = intento * 3
-                utils.logger.info(f"Esperando {espera}s antes de reintentar tras timeout...")
-                time.sleep(espera)
-                continue
+                    with zipfile.ZipFile(backup_path, 'r') as zipf:
+                        bad_file = zipf.testzip()
+                        if bad_file:
+                            if intento < max_intentos:
+                                time.sleep(intento * 2)
+                                continue
+                            return (False, None, f"ZIP corrupto: {bad_file}")
+                except zipfile.BadZipFile:
+                    if intento < max_intentos:
+                        time.sleep(intento * 2)
+                        continue
+                    return (False, None, "ZIP corrupto")
+                
+                size_mb = size / (1024 * 1024)
+                utils.logger.info(f"Compresión exitosa: {archivo_destino} ({size_mb:.1f} MB)")
+                return (True, backup_path, None)
             else:
-                return (False, None, error)
+                if intento < max_intentos:
+                    time.sleep(intento * 2)
+                    continue
+                return (False, None, "No se pudo crear el archivo")
         
         except Exception as e:
             error = f"Error inesperado en compresión: {e}"
             utils.logger.error(error)
             
             if intento < max_intentos:
-                espera = intento * 2
-                utils.logger.info(f"Esperando {espera}s antes de reintentar...")
-                time.sleep(espera)
+                time.sleep(intento * 2)
                 continue
             else:
                 return (False, None, error)
@@ -220,7 +194,7 @@ def navegar_carpetas_mega(ruta_inicial="/"):
                 utils.print_warning("Opción inválida")
                 utils.pausar()
 
-def ejecutar_backup_manual():
+def _ejecutar_backup_manual_legacy():
     utils.limpiar_pantalla()
     print("\n" + "=" * 60)
     print("CREAR BACKUP EN MEGA")
@@ -350,7 +324,7 @@ def ejecutar_backup_manual():
     
     utils.pausar()
 
-def ejecutar_backup_automatico():
+def _ejecutar_backup_automatico_legacy():
     logger_mod = CloudModuleLoader.load_module("logger")
     logger_mod.log_backup_auto_inicio()
     
@@ -531,3 +505,171 @@ def limpiar_backups_antiguos():
     
     except Exception as e:
         utils.logger.error(f"Error en limpiar_backups_antiguos: {e}")
+
+try:
+    from core.pipeline import Pipeline, PipelineContext
+    from core.events import event_bus
+    
+    def _crear_backup_pipeline(mode="manual"):
+        pipeline = Pipeline(f"backup.{mode}")
+        
+        def load_config(ctx):
+            return {
+                'server_folder_name': config.CONFIG.get("server_folder", "servidor_minecraft"),
+                'backup_folder': config.CONFIG.get("backup_folder", "/backups"),
+                'backup_prefix': config.CONFIG.get("backup_prefix", "MSX"),
+                'max_backups': config.CONFIG.get("max_backups", 5)
+            }
+        
+        def find_server(ctx):
+            folder_name = ctx.get('server_folder_name')
+            server_folder = encontrar_carpeta_servidor(folder_name)
+            if not server_folder:
+                raise FileNotFoundError(f"Carpeta '{folder_name}' no encontrada")
+            return {'server_folder': server_folder}
+        
+        def calculate_size(ctx):
+            server_folder = ctx.get('server_folder')
+            total_size = 0
+            for dirpath, _, filenames in os.walk(server_folder):
+                for filename in filenames:
+                    try:
+                        total_size += os.path.getsize(os.path.join(dirpath, filename))
+                    except:
+                        pass
+            size_mb = total_size / (1024 * 1024)
+            return {'size_bytes': total_size, 'size_mb': round(size_mb, 2)}
+        
+        def compress(ctx):
+            server_folder = ctx.get('server_folder')
+            prefix = ctx.get('backup_prefix')
+            timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
+            backup_name = f"{prefix}_{timestamp}.zip"
+            
+            exito, backup_path, error = comprimir_con_manejo_archivos_activos(
+                server_folder, backup_name, max_intentos=3
+            )
+            
+            if not exito:
+                raise RuntimeError(f"Error en compresión: {error}")
+            
+            backup_size_mb = os.path.getsize(backup_path) / (1024 * 1024)
+            return {
+                'backup_name': backup_name,
+                'backup_path': backup_path,
+                'backup_size_mb': round(backup_size_mb, 2)
+            }
+        
+        def upload(ctx):
+            backup_path = ctx.get('backup_path')
+            backup_folder = ctx.get('backup_folder')
+            result = megacmd.upload_file(backup_path, backup_folder, silent=False)
+            if result.returncode != 0:
+                raise RuntimeError(f"Error subiendo a MEGA: {result.stderr}")
+            return {'upload_success': True}
+        
+        def cleanup_local(ctx):
+            backup_path = ctx.get('backup_path')
+            try:
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                return {'local_cleaned': True}
+            except:
+                return {'local_cleaned': False}
+        
+        def cleanup_old(ctx):
+            try:
+                backup_folder = ctx.get('backup_folder')
+                backup_prefix = ctx.get('backup_prefix')
+                max_backups = ctx.get('max_backups')
+                current_backup = ctx.get('backup_name')
+                
+                result = megacmd.list_files(backup_folder)
+                if result.returncode != 0:
+                    return {'cleanup_error': 'No se pudo listar MEGA'}
+                
+                archivos = [line.strip() for line in result.stdout.split('\n')
+                           if backup_prefix in line and '.zip' in line]
+                archivos.sort(reverse=True)
+                
+                if current_backup not in archivos:
+                    archivos.insert(0, current_backup)
+                
+                if len(archivos) > max_backups:
+                    to_delete = archivos[max_backups:]
+                    deleted = 0
+                    for old in to_delete:
+                        if old == current_backup:
+                            continue
+                        result_rm = megacmd.remove_file(f"{backup_folder}/{old}")
+                        if result_rm.returncode == 0:
+                            deleted += 1
+                    return {'old_backups_deleted': deleted}
+                
+                return {'old_backups_deleted': 0}
+            except Exception as e:
+                return {'cleanup_error': str(e)}
+        
+        pipeline \
+            .add_step("load_config", load_config, required=True) \
+            .add_step("find_server", find_server, required=True) \
+            .add_step("calculate_size", calculate_size, required=False) \
+            .add_step("compress", compress, required=True) \
+            .add_step("upload", upload, required=True) \
+            .add_step("cleanup_local", cleanup_local, required=False) \
+            .add_step("cleanup_old", cleanup_old, required=False)
+        
+        return pipeline
+    
+    def ejecutar_backup_manual():
+        try:
+            pipeline = _crear_backup_pipeline("manual")
+            result = pipeline.execute()
+            
+            print("\n" + "=" * 60)
+            print("✓ BACKUP COMPLETADO")
+            print("=" * 60)
+            print(f"Archivo: {result.get('backup_name')}")
+            print(f"Tamaño: {result.get('backup_size_mb')} MB")
+            print(f"Limpiados: {result.get('old_backups_deleted', 0)} backups antiguos")
+            print("=" * 60)
+            utils.pausar()
+            
+        except Exception as e:
+            utils.print_error(f"Error: {e}")
+            utils.logger.error(f"Pipeline backup manual falló: {e}")
+            import traceback
+            utils.logger.error(traceback.format_exc())
+            utils.pausar()
+    
+    def ejecutar_backup_automatico():
+        try:
+            if not config.CONFIG.get("autobackup_enabled", False):
+                utils.logger.info("Autobackup desactivado")
+                return
+            
+            pipeline = _crear_backup_pipeline("auto")
+            result = pipeline.execute()
+            
+            print("\n" + "="*60)
+            print("| BACKUP AUTOMÁTICO COMPLETADO")
+            print(f"| Archivo: {result.get('backup_name')}")
+            print(f"| Tamaño: {result.get('backup_size_mb')} MB")
+            print("="*60 + "\n")
+            
+        except Exception as e:
+            utils.logger.error(f"Pipeline backup auto falló: {e}")
+            print(f"| ERROR: {e}")
+            
+            try:
+                logger_mod = CloudModuleLoader.load_module("logger")
+                logger_mod.log_backup_auto_error(str(e))
+            except:
+                pass
+    
+    utils.logger.info("Sistema de Pipeline cargado correctamente")
+    
+except ImportError as e:
+    utils.logger.warning(f"Sistema Pipeline no disponible, usando legacy: {e}")
+    ejecutar_backup_manual = _ejecutar_backup_manual_legacy
+    ejecutar_backup_automatico = _ejecutar_backup_automatico_legacy

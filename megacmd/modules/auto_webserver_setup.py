@@ -631,8 +631,10 @@ fi
         print(f"\n✓ Servidor web configurado")
         print(f"💡 Puerto: {port}")
         print(f"📋 Ver logs msx: tmux attach -t msx, con este comando vas a poder acceder a la terminal normalmente")
+        
         print(f" Usa ese comando unicamente si queres ver los logs o interactuar con la terminal.")
         print(f" Si queres salir de la termianal sin detener el servidor, presiona Ctrl+B y luego D.")
+        
         print(f" Tambien creo que no hace falta aclarar, esto unicamente funciona si el servidor de Minecraft fue iniciado desde discord")
         
         if use_cloudflare:
