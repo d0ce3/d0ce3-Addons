@@ -199,11 +199,18 @@ class ModuleLoader:
             if not pm.PackageManager.ensure_installed():
                 return None
         else:
-
             if not ModuleLoader._bootstrap_ensure_installed():
                 return None
         
-        module_file = os.path.join(PACKAGE_DIR, f"{module_name}.py")
+        if '.' in module_name:
+            parts = module_name.split('.')
+            base_dir = CACHE_DIR
+            for part in parts[:-1]:
+                base_dir = os.path.join(base_dir, part)
+            module_file = os.path.join(base_dir, f"{parts[-1]}.py")
+        else:
+            module_file = os.path.join(PACKAGE_DIR, f"{module_name}.py")
+        
         if not os.path.exists(module_file):
             return None
         
@@ -216,6 +223,9 @@ class ModuleLoader:
             
             spec = importlib.util.spec_from_loader(module_name, loader=None)
             module = importlib.util.module_from_spec(spec)
+            
+            if CACHE_DIR not in sys.path:
+                sys.path.insert(0, CACHE_DIR)
             
             module.__dict__.update({
                 '__file__': module_file,
