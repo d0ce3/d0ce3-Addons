@@ -484,7 +484,19 @@ def limpiar_backups_antiguos():
         
         archivos = [line.strip() for line in result.stdout.split('\n') 
                    if backup_prefix in line and '.zip' in line]
-        archivos.sort(reverse=True)
+        
+        def extraer_fecha(nombre_archivo):
+            try:
+                partes = nombre_archivo.replace('.zip', '').split('_')
+                if len(partes) >= 3:
+                    fecha_str = partes[-2]
+                    hora_str = partes[-1]
+                    return datetime.strptime(f"{fecha_str}_{hora_str}", "%d-%m-%Y_%H-%M")
+            except:
+                pass
+            return datetime.min
+        
+        archivos.sort(key=extraer_fecha, reverse=True)
         
         utils.logger.info(f"Backups encontrados: {len(archivos)}")
         
@@ -514,6 +526,7 @@ try:
         pipeline = Pipeline(f"backup.{mode}")
         
         def load_config(ctx):
+            print("📋 Cargando configuración...")
             return {
                 'server_folder_name': config.CONFIG.get("server_folder", "servidor_minecraft"),
                 'backup_folder': config.CONFIG.get("backup_folder", "/backups"),
@@ -522,13 +535,16 @@ try:
             }
         
         def find_server(ctx):
+            print("📂 Buscando carpeta del servidor...")
             folder_name = ctx.get('server_folder_name')
             server_folder = encontrar_carpeta_servidor(folder_name)
             if not server_folder:
                 raise FileNotFoundError(f"Carpeta '{folder_name}' no encontrada")
+            print(f"✓ Encontrada: {server_folder}")
             return {'server_folder': server_folder}
         
         def calculate_size(ctx):
+            print("📊 Calculando tamaño...")
             server_folder = ctx.get('server_folder')
             total_size = 0
             for dirpath, _, filenames in os.walk(server_folder):
@@ -538,6 +554,7 @@ try:
                     except:
                         pass
             size_mb = total_size / (1024 * 1024)
+            print(f"✓ Tamaño total: {size_mb:.1f} MB")
             return {'size_bytes': total_size, 'size_mb': round(size_mb, 2)}
         
         def compress(ctx):
@@ -545,6 +562,9 @@ try:
             prefix = ctx.get('backup_prefix')
             timestamp = datetime.now(TIMEZONE_ARG).strftime("%d-%m-%Y_%H-%M")
             backup_name = f"{prefix}_{timestamp}.zip"
+            
+            print(f"\n⏳ Comprimiendo: {backup_name}")
+            print("💡 Esto puede tomar varios minutos...")
             
             exito, backup_path, error = comprimir_con_manejo_archivos_activos(
                 server_folder, backup_name, max_intentos=3
@@ -554,6 +574,7 @@ try:
                 raise RuntimeError(f"Error en compresión: {error}")
             
             backup_size_mb = os.path.getsize(backup_path) / (1024 * 1024)
+            print(f"✓ Comprimido: {backup_size_mb:.1f} MB\n")
             return {
                 'backup_name': backup_name,
                 'backup_path': backup_path,
@@ -563,21 +584,37 @@ try:
         def upload(ctx):
             backup_path = ctx.get('backup_path')
             backup_folder = ctx.get('backup_folder')
-            result = megacmd.upload_file(backup_path, backup_folder, silent=False)
-            if result.returncode != 0:
-                raise RuntimeError(f"Error subiendo a MEGA: {result.stderr}")
+            backup_name = ctx.get('backup_name')
+            
+            print(f"☁️  Subiendo a MEGA: {backup_folder}/")
+            
+            proceso_upload = subprocess.Popen(
+                ["mega-put", "-c", backup_name, backup_folder + "/"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=os.path.dirname(backup_path)
+            )
+            
+            spinner = utils.Spinner("Subiendo")
+            if not spinner.start(proceso_upload):
+                raise RuntimeError("Error al subir a MEGA")
+            
+            print(f"✓ Subido exitosamente\n")
             return {'upload_success': True}
         
         def cleanup_local(ctx):
+            print("🧹 Limpiando archivo local...")
             backup_path = ctx.get('backup_path')
             try:
                 if os.path.exists(backup_path):
                     os.remove(backup_path)
+                print("✓ Archivo local eliminado")
                 return {'local_cleaned': True}
             except:
                 return {'local_cleaned': False}
         
         def cleanup_old(ctx):
+            print("🗑️  Limpiando backups antiguos...")
             try:
                 backup_folder = ctx.get('backup_folder')
                 backup_prefix = ctx.get('backup_prefix')
@@ -590,7 +627,19 @@ try:
                 
                 archivos = [line.strip() for line in result.stdout.split('\n')
                            if backup_prefix in line and '.zip' in line]
-                archivos.sort(reverse=True)
+                
+                def extraer_fecha(nombre_archivo):
+                    try:
+                        partes = nombre_archivo.replace('.zip', '').split('_')
+                        if len(partes) >= 3:
+                            fecha_str = partes[-2]
+                            hora_str = partes[-1]
+                            return datetime.strptime(f"{fecha_str}_{hora_str}", "%d-%m-%Y_%H-%M")
+                    except:
+                        pass
+                    return datetime.min
+                
+                archivos.sort(key=extraer_fecha, reverse=True)
                 
                 if current_backup not in archivos:
                     archivos.insert(0, current_backup)
@@ -604,10 +653,14 @@ try:
                         result_rm = megacmd.remove_file(f"{backup_folder}/{old}")
                         if result_rm.returncode == 0:
                             deleted += 1
+                            utils.logger.info(f"Eliminado backup antiguo: {old}")
+                    print(f"✓ Eliminados {deleted} backups antiguos")
                     return {'old_backups_deleted': deleted}
                 
+                print("✓ No hay backups para eliminar")
                 return {'old_backups_deleted': 0}
             except Exception as e:
+                utils.logger.error(f"Error en cleanup_old: {e}")
                 return {'cleanup_error': str(e)}
         
         pipeline \
@@ -623,6 +676,13 @@ try:
     
     def ejecutar_backup_manual():
         try:
+            utils.limpiar_pantalla()
+            print("\n" + "=" * 60)
+            print("CREAR BACKUP EN MEGA")
+            print("=" * 60 + "\n")
+            
+            utils.logger.info("========== INICIO BACKUP MANUAL ==========")
+            
             pipeline = _crear_backup_pipeline("manual")
             result = pipeline.execute()
             
@@ -643,6 +703,13 @@ try:
             utils.pausar()
     
     def ejecutar_backup_automatico():
+        logger_mod = CloudModuleLoader.load_module("logger")
+        logger_mod.log_backup_auto_inicio()
+        
+        print("\n" + "="*60)
+        print("| INICIANDO BACKUP AUTOMÁTICO")
+        print("="*60)
+        
         try:
             if not config.CONFIG.get("autobackup_enabled", False):
                 utils.logger.info("Autobackup desactivado")
@@ -657,13 +724,22 @@ try:
             print(f"| Tamaño: {result.get('backup_size_mb')} MB")
             print("="*60 + "\n")
             
+            logger_mod.log_backup_auto_exito(result.get('backup_name'), result.get('backup_size_mb'))
+            
         except Exception as e:
-            utils.logger.error(f"Pipeline backup auto falló: {e}")
-            print(f"| ERROR: {e}")
+            error_msg = str(e)
+            utils.logger.error(f"Pipeline backup auto falló: {error_msg}")
+            print(f"| ERROR: {error_msg}")
             
             try:
-                logger_mod = CloudModuleLoader.load_module("logger")
-                logger_mod.log_backup_auto_error(str(e))
+                logger_mod.log_backup_auto_error(error_msg)
+            except:
+                pass
+            
+            try:
+                rcon = CloudModuleLoader.load_module("rcon")
+                if rcon and rcon.is_connected():
+                    rcon.send_command(f"say [BACKUP ERROR] {error_msg}")
             except:
                 pass
     

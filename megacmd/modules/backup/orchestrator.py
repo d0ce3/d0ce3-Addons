@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from core.pipeline import Pipeline, PipelineContext
 from core.events import event_bus
 from .core import BackupCore
@@ -94,7 +95,18 @@ def create_backup_pipeline(mode: str = "manual") -> Pipeline:
                 if backup_prefix in line and '.zip' in line:
                     backups.append(line)
             
-            backups.sort(reverse=True)
+            def extraer_fecha(nombre_archivo):
+                try:
+                    partes = nombre_archivo.replace('.zip', '').split('_')
+                    if len(partes) >= 3:
+                        fecha_str = partes[-2]
+                        hora_str = partes[-1]
+                        return datetime.strptime(f"{fecha_str}_{hora_str}", "%d-%m-%Y_%H-%M")
+                except:
+                    pass
+                return datetime.min
+            
+            backups.sort(key=extraer_fecha, reverse=True)
             
             current_backup = ctx.get('backup_name')
             if current_backup not in backups:
@@ -104,6 +116,8 @@ def create_backup_pipeline(mode: str = "manual") -> Pipeline:
                 to_delete = backups[max_backups:]
                 deleted_count = 0
                 
+                utils = CloudModuleLoader.load_module("utils")
+                
                 for old_backup in to_delete:
                     if old_backup == current_backup:
                         continue
@@ -111,6 +125,7 @@ def create_backup_pipeline(mode: str = "manual") -> Pipeline:
                     result_rm = megacmd.remove_file(f"{backup_folder}/{old_backup}")
                     if result_rm.returncode == 0:
                         deleted_count += 1
+                        utils.logger.info(f"Eliminado backup antiguo: {old_backup}")
                 
                 return {'old_backups_deleted': deleted_count, 'deleted_files': to_delete}
             
